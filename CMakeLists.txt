@@ -6,23 +6,25 @@ SET(CMAKE_SYSTEM_PROCESSOR cortex-m7)
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-SET(CMAKE_C_COMPILER "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/bin/arm-none-eabi-gcc.exe")
-SET(CMAKE_ASM_COMPILER "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/bin/arm-none-eabi-gcc.exe")
+SET(TOOL_DIR "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/")
+
+SET(CMAKE_C_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc.exe")
+SET(CMAKE_ASM_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc.exe")
 SET(CMAKE_C_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc -O0 -gdwarf-2 -g -std=c99")
 SET(CMAKE_ASM_FLAGS " -c -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -x assembler-with-cpp -Wa,-mimplicit-it=thumb  -gdwarf-2")
 SET(CMAKE_C_COMPILER_WORKS TRUE)
 
-SET(CMAKE_CXX_COMPILER "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/bin/arm-none-eabi-g++.exe")
+SET(CMAKE_CXX_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-g++.exe")
 SET(CMAKE_CXX_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc -O0 -gdwarf-2 -g")
 SET(CMAKE_CXX_COMPILER_WORKS TRUE)
 
-SET(CMAKE_OBJCOPY "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/bin/arm-none-eabi-objcopy.exe")
-SET(CMAKE_SIZE "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/bin/arm-none-eabi-size.exe")
+SET(CMAKE_OBJCOPY "${TOOL_DIR}/bin/arm-none-eabi-objcopy.exe")
+SET(CMAKE_SIZE "${TOOL_DIR}/bin/arm-none-eabi-size.exe")
 
 SET(CMAKE_EXE_LINKER_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Wl,--gc-sections,-Map=rtthread.map,-cref,-u,Reset_Handler -T ${CMAKE_SOURCE_DIR}/linkscripts/STM32H750VBTx/link.lds")
 
 SET(CMAKE_CXX_STANDARD 14)
-PROJECT(rtthread C CXX ASM)
+PROJECT(Simulated-GW-ECU C CXX ASM)
 INCLUDE_DIRECTORIES(
 	.
 	applications
@@ -36,10 +38,8 @@ INCLUDE_DIRECTORIES(
 	libraries/STM32H7xx_HAL_Driver/Inc/Legacy
 	rt-thread/components/libc/compilers/common/include
 	rt-thread/components/libc/compilers/newlib
-	
 	rt-thread/components/drivers/include
 	rt-thread/components/finsh
-	.
 	rt-thread/include
 	rt-thread/libcpu/arm/common
 	rt-thread/libcpu/arm/cortex-m7
