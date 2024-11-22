@@ -12,3 +12,6 @@ The STM32H750VBt6 microcontroller is chosen for its high performance, multiple c
 
 #### Software: RT-Thread
 RT-Thread is selected as the operating system for its robustness and compatibility with the STM32H750VBt6 microcontroller. It provides a stable platform for developing real-time applications, ensuring efficient management of system resources and facilitating the implementation of the required functionalities, such as CAN and Ethernet communication.
+
+#### Details of implemented functions
+Please refer to the docs folder.
