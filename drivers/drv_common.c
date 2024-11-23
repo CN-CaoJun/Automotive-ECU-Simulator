@@ -17,7 +17,7 @@ static void reboot(uint8_t argc, char **argv)
 {
     rt_hw_cpu_reset();
 }
-FINSH_FUNCTION_EXPORT_ALIAS(reboot, __cmd_reboot, Reboot System);
+// FINSH_FUNCTION_EXPORT_ALIAS(reboot, __cmd_reboot, Reboot System);
 #endif /* RT_USING_FINSH */
 
 /* SysTick configuration */
@@ -147,3 +147,5 @@ void hw_board_init(char *clock_src, int32_t clock_src_freq, int32_t clock_target
 #endif
 
 }
+
+MSH_CMD_EXPORT(reboot, Reboot System);
