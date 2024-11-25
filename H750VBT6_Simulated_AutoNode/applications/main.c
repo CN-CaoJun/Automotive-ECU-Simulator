@@ -16,7 +16,7 @@
 
 int main(void)
 {
-    int count = 1;
+    int count = 0;
 
     while (count++)
     {

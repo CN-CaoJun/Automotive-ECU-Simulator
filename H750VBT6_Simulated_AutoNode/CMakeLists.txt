@@ -47,6 +47,8 @@ INCLUDE_DIRECTORIES(
 	rt-thread/components/libc/posix/io/eventfd
 	rt-thread/components/libc/posix/io/poll
 	rt-thread/components/libc/posix/ipc
+	cubemx
+	cubemx/Inc
 )
 
 ADD_DEFINITIONS(
@@ -61,6 +63,7 @@ ADD_DEFINITIONS(
 
 SET(PROJECT_SOURCES
 	applications/main.c
+	cubemx/Src/stm32h7xx_hal_msp.c
 	rt-thread/components/libc/compilers/common/cctype.c
 	rt-thread/components/libc/compilers/common/cstdlib.c
 	rt-thread/components/libc/compilers/common/cstring.c
