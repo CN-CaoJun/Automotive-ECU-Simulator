@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "drv_common.h": "c",
+        "rope": "c",
+        "variant": "c",
+        "time.h": "c",
+        "select.h": "c",
+        "algorithm": "c"
+    }
+}

@@ -1,0 +1,12 @@
+[
+ {
+  "path": "/packages/tools/CmBacktrace", 
+  "ver": "v1.4.1", 
+  "name": "CMBACKTRACE"
+ }, 
+ {
+  "path": "/packages/misc/state_machine", 
+  "ver": "latest", 
+  "name": "STATE_MACHINE"
+ }
+]
