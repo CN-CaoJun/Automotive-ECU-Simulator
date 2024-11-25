@@ -44,14 +44,9 @@ menu "On-chip Peripheral Drivers"
             select BSP_USING_FDCAN 
             default n
         config BSP_USING_FDCAN1
-            bool "BSP_USING_FDCAN"
+            bool "BSP_USING_FDCAN1"
             select BSP_USING_FDCAN1 
             default n
-        config BSP_USING_FDCAN2
-            bool "BSP_USING_FDCAN"
-            select BSP_USING_FDCAN2 
-            default n
-        
     endif
 
 

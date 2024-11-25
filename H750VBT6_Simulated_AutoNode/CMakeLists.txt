@@ -25,6 +25,9 @@ SET(CMAKE_EXE_LINKER_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=
 
 SET(CMAKE_CXX_STANDARD 14)
 PROJECT(Simulated-GW-ECU C CXX ASM)
+
+aux_source_directory(applications APP_SRCS)
+
 INCLUDE_DIRECTORIES(
 	.
 	applications
@@ -62,7 +65,6 @@ ADD_DEFINITIONS(
 )
 
 SET(PROJECT_SOURCES
-	applications/main.c
 	cubemx/Src/stm32h7xx_hal_msp.c
 	rt-thread/components/libc/compilers/common/cctype.c
 	rt-thread/components/libc/compilers/common/cstdlib.c
@@ -225,6 +227,9 @@ LINK_LIBRARIES(
 	m
 )
 
-ADD_EXECUTABLE(${CMAKE_PROJECT_NAME}.elf ${PROJECT_SOURCES})
+ADD_EXECUTABLE(${CMAKE_PROJECT_NAME}.elf 
+				${APP_SRCS} 
+				${PROJECT_SOURCES}
+)
 ADD_CUSTOM_COMMAND(TARGET ${CMAKE_PROJECT_NAME}.elf POST_BUILD 
 COMMAND ${CMAKE_OBJCOPY} -O binary ${CMAKE_PROJECT_NAME}.elf ${CMAKE_PROJECT_NAME}.bin COMMAND ${CMAKE_SIZE} ${CMAKE_PROJECT_NAME}.elf)

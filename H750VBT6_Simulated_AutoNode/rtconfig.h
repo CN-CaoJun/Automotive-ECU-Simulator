@@ -257,7 +257,6 @@
 
 #define BSP_USING_FDCAN
 #define BSP_USING_FDCAN1
-#define BSP_USING_FDCAN2
 
 /* Board extended module Drivers */
 

@@ -104,55 +104,35 @@ static rt_err_t _inline_can_config(struct rt_can_device *can, struct can_configu
 
 	RT_ASSERT(pdrv_can);
 
-	pdrv_can->fdcanHandle.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+	pdrv_can->fdcanHandle.Instance = FDCAN1;
+	pdrv_can->fdcanHandle.Init.FrameFormat = FDCAN_FRAME_FD_NO_BRS;
 	pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_NORMAL;
-	pdrv_can->fdcanHandle.Init.AutoRetransmission = DISABLE;
-	pdrv_can->fdcanHandle.Init.TransmitPause = DISABLE;
+	pdrv_can->fdcanHandle.Init.AutoRetransmission = ENABLE;
+	pdrv_can->fdcanHandle.Init.TransmitPause = ENABLE;
 	pdrv_can->fdcanHandle.Init.ProtocolException = DISABLE;
+	pdrv_can->fdcanHandle.Init.NominalPrescaler = 2;
+	pdrv_can->fdcanHandle.Init.NominalSyncJumpWidth = 2;
+	pdrv_can->fdcanHandle.Init.NominalTimeSeg1 = 63;
+	pdrv_can->fdcanHandle.Init.NominalTimeSeg2 = 16;
+	pdrv_can->fdcanHandle.Init.DataPrescaler = 2;
+	pdrv_can->fdcanHandle.Init.DataSyncJumpWidth = 6;
+	pdrv_can->fdcanHandle.Init.DataTimeSeg1 = 13;
+	pdrv_can->fdcanHandle.Init.DataTimeSeg2 = 6;
+	pdrv_can->fdcanHandle.Init.MessageRAMOffset = 0;
+	pdrv_can->fdcanHandle.Init.StdFiltersNbr = 0;
+	pdrv_can->fdcanHandle.Init.ExtFiltersNbr = 0;
+	pdrv_can->fdcanHandle.Init.RxFifo0ElmtsNbr = 0;
+	pdrv_can->fdcanHandle.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_64;
+	pdrv_can->fdcanHandle.Init.RxFifo1ElmtsNbr = 0;
+	pdrv_can->fdcanHandle.Init.RxFifo1ElmtSize = FDCAN_DATA_BYTES_64;
+	pdrv_can->fdcanHandle.Init.RxBuffersNbr = 0;
+	pdrv_can->fdcanHandle.Init.RxBufferSize = FDCAN_DATA_BYTES_64;
+	pdrv_can->fdcanHandle.Init.TxEventsNbr = 0;
+	pdrv_can->fdcanHandle.Init.TxBuffersNbr = 0;
+	pdrv_can->fdcanHandle.Init.TxFifoQueueElmtsNbr = 0;
+	pdrv_can->fdcanHandle.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
+	pdrv_can->fdcanHandle.Init.TxElmtSize = FDCAN_DATA_BYTES_64;
 
-	switch (cfg->mode)
-	{
-	case RT_CAN_MODE_NORMAL:
-		pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_NORMAL;
-		break;
-	case RT_CAN_MODE_LISEN:
-		pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_BUS_MONITORING;
-		break;
-	case RT_CAN_MODE_LOOPBACK:
-		pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_INTERNAL_LOOPBACK;
-		break;
-	default:
-		pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_NORMAL;
-		break;
-	}
-
-	/*config baud rate*/
-	tmp_u32Index = _inline_get_NTbaud_index(cfg->baud_rate);
-
-	pdrv_can->fdcanHandle.Init.NominalPrescaler = st_CanNTconfig[tmp_u32Index].u16Nbrp;
-	pdrv_can->fdcanHandle.Init.NominalSyncJumpWidth = st_CanNTconfig[tmp_u32Index].u8Nsjw;
-	pdrv_can->fdcanHandle.Init.NominalTimeSeg1 = st_CanNTconfig[tmp_u32Index].u8Ntseg1;
-	pdrv_can->fdcanHandle.Init.NominalTimeSeg2 = st_CanNTconfig[tmp_u32Index].u8Ntseg2;
-
-
-	if(pdrv_can->fdcanHandle.Instance == FDCAN1)
-	{
-		pdrv_can->fdcanHandle.Init.MessageRAMOffset = 0;					
-	}
-	else
-	{
-		pdrv_can->fdcanHandle.Init.MessageRAMOffset = 1280;					
-	}
-	pdrv_can->fdcanHandle.Init.StdFiltersNbr = 2;							
-	pdrv_can->fdcanHandle.Init.ExtFiltersNbr = 2;							
-	pdrv_can->fdcanHandle.Init.RxFifo0ElmtsNbr = 1;							
-	pdrv_can->fdcanHandle.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_8;		
-	pdrv_can->fdcanHandle.Init.RxBuffersNbr = 0;							
-	pdrv_can->fdcanHandle.Init.TxEventsNbr = 0;								
-	pdrv_can->fdcanHandle.Init.TxBuffersNbr = 3;							
-	pdrv_can->fdcanHandle.Init.TxFifoQueueElmtsNbr = 0;						
-	pdrv_can->fdcanHandle.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;	
-	pdrv_can->fdcanHandle.Init.TxElmtSize = FDCAN_DATA_BYTES_8;				
 
 	if (HAL_FDCAN_Init(&pdrv_can->fdcanHandle) != HAL_OK)
 	{
