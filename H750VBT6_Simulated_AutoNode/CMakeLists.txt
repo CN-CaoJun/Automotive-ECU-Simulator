@@ -82,6 +82,7 @@ SET(PROJECT_SOURCES
 	rt-thread/components/drivers/ipc/workqueue.c
 	rt-thread/components/drivers/pin/pin.c
 	rt-thread/components/drivers/serial/serial.c
+	rt-thread/components/drivers/can/can.c
 	rt-thread/components/finsh/shell.c
 	rt-thread/components/finsh/msh.c
 	rt-thread/components/finsh/msh_parse.c
@@ -123,6 +124,7 @@ SET(PROJECT_SOURCES
 	drivers/drv_usbd.c
 	drivers/drv_usbh.c
 	drivers/drv_wdt.c
+	drivers/drv_fdcan.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc_ex.c
@@ -210,6 +212,7 @@ SET(PROJECT_SOURCES
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_usart_ex.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_wwdg.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_ll_usb.c
+	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_fdcan.c
 	libraries/CMSIS/Device/ST/STM32H7xx/Source/Templates/gcc/startup_stm32h750xx.S
 	libraries/CMSIS/Device/ST/STM32H7xx/Source/Templates/system_stm32h7xx.c
 )

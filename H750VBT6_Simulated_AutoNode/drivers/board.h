@@ -41,9 +41,9 @@ extern "C"
 
 /*-------------------------- CLOCK CONFIG BEGIN --------------------------*/
 
-#define BSP_CLOCK_SOURCE                  ("HSI")
+#define BSP_CLOCK_SOURCE                  ("HSE")
 #define BSP_CLOCK_SOURCE_FREQ_MHZ         ((int32_t)0)
-#define BSP_CLOCK_SYSTEM_FREQ_MHZ         ((int32_t)180)
+#define BSP_CLOCK_SYSTEM_FREQ_MHZ         ((int32_t)480)
 
 /*-------------------------- CLOCK CONFIG END --------------------------*/
 
