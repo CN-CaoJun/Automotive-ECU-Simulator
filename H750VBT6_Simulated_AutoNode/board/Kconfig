@@ -35,20 +35,7 @@ menu "On-chip Peripheral Drivers"
     
     config BSP_USING_FDCAN
         bool "Enable FDCAN"
-        select BSP_USING_FDCAN 
         default n
-
-    if BSP_USING_FDCAN
-        config BSP_USING_FDCAN
-            bool "BSP_USING_FDCAN"
-            select BSP_USING_FDCAN 
-            default n
-        config BSP_USING_FDCAN1
-            bool "BSP_USING_FDCAN1"
-            select BSP_USING_FDCAN1 
-            default n
-    endif
-
 
     menuconfig BSP_USING_UART
         bool "Enable UART"
