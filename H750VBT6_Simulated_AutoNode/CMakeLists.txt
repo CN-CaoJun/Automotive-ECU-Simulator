@@ -6,21 +6,33 @@ SET(CMAKE_SYSTEM_PROCESSOR cortex-m7)
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-SET(TOOL_DIR "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/")
+if(WIN32)
+    SET(TOOL_DIR "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw")
+elseif(UNIX)
+    SET(TOOL_DIR "/home/dj461v/wkspace/gcc-arm-none-eabi-10.3-2021.10/")
+endif()
 
-SET(CMAKE_C_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc.exe")
-SET(CMAKE_ASM_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc.exe")
+message(STATUS "TOOL_DIR: ${TOOL_DIR}")
+
+if(WIN32)
+	SET(CMAKE_C_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc.exe")
+	SET(CMAKE_ASM_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc.exe")
+	SET(CMAKE_CXX_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-g++.exe")
+	SET(CMAKE_OBJCOPY "${TOOL_DIR}/bin/arm-none-eabi-objcopy.exe")
+	SET(CMAKE_SIZE "${TOOL_DIR}/bin/arm-none-eabi-size.exe")
+elseif(UNIX)
+	SET(CMAKE_C_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc")
+	SET(CMAKE_ASM_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc")
+	SET(CMAKE_CXX_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-g++")
+	SET(CMAKE_OBJCOPY "${TOOL_DIR}/bin/arm-none-eabi-objcopy")
+	SET(CMAKE_SIZE "${TOOL_DIR}/bin/arm-none-eabi-size")
+endif()
+
 SET(CMAKE_C_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc -O0 -gdwarf-2 -g -std=c99")
 SET(CMAKE_ASM_FLAGS " -c -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -x assembler-with-cpp -Wa,-mimplicit-it=thumb  -gdwarf-2")
 SET(CMAKE_C_COMPILER_WORKS TRUE)
-
-SET(CMAKE_CXX_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-g++.exe")
 SET(CMAKE_CXX_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc -O0 -gdwarf-2 -g")
 SET(CMAKE_CXX_COMPILER_WORKS TRUE)
-
-SET(CMAKE_OBJCOPY "${TOOL_DIR}/bin/arm-none-eabi-objcopy.exe")
-SET(CMAKE_SIZE "${TOOL_DIR}/bin/arm-none-eabi-size.exe")
-
 SET(CMAKE_EXE_LINKER_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Wl,--gc-sections,-Map=rtthread.map,-cref,-u,Reset_Handler -T ${CMAKE_SOURCE_DIR}/linkscripts/STM32H750VBTx/link.lds")
 
 SET(CMAKE_CXX_STANDARD 14)
@@ -231,5 +243,21 @@ ADD_EXECUTABLE(${CMAKE_PROJECT_NAME}.elf
 				${APP_SRCS} 
 				${PROJECT_SOURCES}
 )
-ADD_CUSTOM_COMMAND(TARGET ${CMAKE_PROJECT_NAME}.elf POST_BUILD 
+
+ADD_CUSTOM_COMMAND(TARGET ${CMAKE_PROJECT_NAME}.elf POST_BUILD
 COMMAND ${CMAKE_OBJCOPY} -O binary ${CMAKE_PROJECT_NAME}.elf ${CMAKE_PROJECT_NAME}.bin COMMAND ${CMAKE_SIZE} ${CMAKE_PROJECT_NAME}.elf)
+
+add_custom_target(flash
+	DEPENDS ${CMAKE_PROJECT_NAME}.elf
+	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash script..."
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
+	COMMENT "Running batch script after build"
+)
+
+add_custom_target(debug
+	DEPENDS ${CMAKE_PROJECT_NAME}.elf
+	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
+	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_debug.bat
+)
