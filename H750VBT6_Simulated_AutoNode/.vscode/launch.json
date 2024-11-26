@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "General Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program" : "build/Simulated-GW-ECU.elf",
+            "args":[],
+            "stopAtConnect": false,
+            "cwd": "${workspaceRoot}",
+            "environment":[],
+            "externConsole":false,
+            "MIMode":"gdb",
+            "miDebuggerPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
+            "miDebuggerServerAddress": "localhost:3333"
+        },
+        {
+            "name": "Pyocd Debug",
+            "cwd": "${workspaceFolder}",
+            "executable": "build/Simulated-GW-ECU.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "targetId": "STM32H750VBTx",
+            "showDevDebugOutput": "none",
+            "svdFile": "STM32H750x.svd",
+            "servertype": "pyocd",
+            "serverpath": "C:/Users/dj461v/AppData/Local/miniconda3/envs/pyocd/Scripts/pyocd.exe",
+            "armToolchainPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin",
+            "gdbPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
+        },
+    ]
+}

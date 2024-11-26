@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "drv_common.h": "c",
+        "rope": "c",
+        "variant": "c",
+        "time.h": "c",
+        "select.h": "c",
+        "algorithm": "c",
+        "service_cfg.h": "c",
+        "main.h": "c",
+        "stm32h7xx_hal.h": "c",
+        "stm32h7xx_hal_conf.h": "c",
+        "kconfig": "cpp",
+        "board.h": "c"
+    },
+    "cortex-debug.variableUseNaturalFormat": false
+}

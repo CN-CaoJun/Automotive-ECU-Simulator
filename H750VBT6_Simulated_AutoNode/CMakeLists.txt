@@ -8,6 +8,7 @@ SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(WIN32)
     SET(TOOL_DIR "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw")
+	set(PYTHON_EXECUTABLE "C:/Users/dj461v/AppData/Local/Programs/Python/Python38/python.exe")
 elseif(UNIX)
     SET(TOOL_DIR "/home/dj461v/wkspace/gcc-arm-none-eabi-10.3-2021.10/")
 endif()
@@ -260,4 +261,18 @@ add_custom_target(debug
 	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
 	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
 	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_debug.bat
+)
+
+add_custom_target(oflash
+	DEPENDS ${CMAKE_PROJECT_NAME}.elf
+	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.bat
+
+)
+
+add_custom_target(odebug
+	DEPENDS ${CMAKE_PROJECT_NAME}.elf
+	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_debug"
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/debug.bat
+
 )
