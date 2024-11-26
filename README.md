@@ -23,5 +23,14 @@ The STM32F407VGT6 is a microcontroller based on the high-performance Arm Cortex-
 
 RT-Thread is selected as the operating system for its robustness and compatibility with the STM32H750VBt6 microcontroller. It provides a stable platform for developing real-time applications, ensuring efficient management of system resources and facilitating the implementation of the required functionalities, such as CAN and Ethernet communication.
 
+`The reason choose rt-thread`
+1. I strongly agree with the concept of the RTThread project. The abstract and modular features will bring about a very good software architecture.
+
+2. Since graduated, I have been working in automotive electronics and have not had any exposure to rtos other than AutosarOS. This is also a great opportunity to broaden my horizons
+
+3. RTThread is a very friendly project. The community is very active and friendly. I can get help from the community very quickly.
+
 #### Details of implemented functions
 Please refer to the docs folder.
+
+
