@@ -104,7 +104,7 @@ static rt_err_t _inline_can_config(struct rt_can_device *can, struct can_configu
 
 	RT_ASSERT(pdrv_can);
 
-	pdrv_can->fdcanHandle.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+	pdrv_can->fdcanHandle.Init.FrameFormat = FDCAN_FRAME_FD_BRS;
 	pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_NORMAL;
 	pdrv_can->fdcanHandle.Init.AutoRetransmission = ENABLE;
 	pdrv_can->fdcanHandle.Init.TransmitPause = ENABLE;
@@ -134,6 +134,12 @@ static rt_err_t _inline_can_config(struct rt_can_device *can, struct can_configu
 	pdrv_can->fdcanHandle.Init.NominalTimeSeg1 = st_CanNTconfig[tmp_u32Index].u8Ntseg1;
 	pdrv_can->fdcanHandle.Init.NominalTimeSeg2 = st_CanNTconfig[tmp_u32Index].u8Ntseg2;
 
+	
+	/*FD Config 2000K*/
+	pdrv_can->fdcanHandle.Init.DataPrescaler = 1;
+	pdrv_can->fdcanHandle.Init.DataSyncJumpWidth = 6;
+	pdrv_can->fdcanHandle.Init.DataTimeSeg1 = 13;
+	pdrv_can->fdcanHandle.Init.DataTimeSeg2 = 6;
 
 	if(pdrv_can->fdcanHandle.Instance == FDCAN1)
 	{
@@ -145,14 +151,17 @@ static rt_err_t _inline_can_config(struct rt_can_device *can, struct can_configu
 	}
 	pdrv_can->fdcanHandle.Init.StdFiltersNbr = 2;							
 	pdrv_can->fdcanHandle.Init.ExtFiltersNbr = 2;							
-	pdrv_can->fdcanHandle.Init.RxFifo0ElmtsNbr = 1;							
-	pdrv_can->fdcanHandle.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_8;		
-	pdrv_can->fdcanHandle.Init.RxBuffersNbr = 0;							
-	pdrv_can->fdcanHandle.Init.TxEventsNbr = 0;								
-	pdrv_can->fdcanHandle.Init.TxBuffersNbr = 3;							
-	pdrv_can->fdcanHandle.Init.TxFifoQueueElmtsNbr = 0;						
-	pdrv_can->fdcanHandle.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;	
-	pdrv_can->fdcanHandle.Init.TxElmtSize = FDCAN_DATA_BYTES_8;				
+	pdrv_can->fdcanHandle.Init.RxFifo0ElmtsNbr = 1;
+	pdrv_can->fdcanHandle.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_64;
+	pdrv_can->fdcanHandle.Init.RxFifo1ElmtsNbr = 0;
+	pdrv_can->fdcanHandle.Init.RxFifo1ElmtSize = FDCAN_DATA_BYTES_64;
+	pdrv_can->fdcanHandle.Init.RxBuffersNbr = 0;
+	pdrv_can->fdcanHandle.Init.RxBufferSize = FDCAN_DATA_BYTES_64;
+	pdrv_can->fdcanHandle.Init.TxEventsNbr = 0;
+	pdrv_can->fdcanHandle.Init.TxBuffersNbr = 3;
+	pdrv_can->fdcanHandle.Init.TxFifoQueueElmtsNbr = 0;
+	pdrv_can->fdcanHandle.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
+	pdrv_can->fdcanHandle.Init.TxElmtSize = FDCAN_DATA_BYTES_64;		
 
 	if (HAL_FDCAN_Init(&pdrv_can->fdcanHandle) != HAL_OK)
 	{
@@ -388,14 +397,8 @@ static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 	pmsg = (struct rt_can_msg *) buf;
 
 	/* Check the parameters */
-	if(pmsg->len > 8)
-	{
-		tmp_u32DataLen = 8;
-	}
-	else
-	{
-		tmp_u32DataLen = pmsg->len;
-	}
+	tmp_u32DataLen = pmsg->len;
+
 	tmp_u32DataLen <<=16;
 
 	if(pmsg->ide == RT_CAN_EXTID)
@@ -406,6 +409,7 @@ static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 	{
 		pdrv_can->TxHeader.IdType = FDCAN_STANDARD_ID;
 	}
+
 	if (RT_CAN_DTR == pmsg->rtr)
 	{
 		pdrv_can->TxHeader.TxFrameType = FDCAN_DATA_FRAME;
@@ -415,9 +419,17 @@ static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 		pdrv_can->TxHeader.TxFrameType = FDCAN_REMOTE_FRAME;
 	}
 
+	
 	pdrv_can->TxHeader.Identifier = pmsg->id;
 	pdrv_can->TxHeader.DataLength = tmp_u32DataLen;
-	if(HAL_FDCAN_AddMessageToTxBuffer(&pdrv_can->fdcanHandle, &pdrv_can->TxHeader, pmsg->data, FDCAN_TX_BUFFER0+box_num) != HAL_OK)
+
+
+	if (pmsg->fd_frame == 1)
+	{
+		pdrv_can->TxHeader.FDFormat = FDCAN_FD_CAN;
+	}
+
+	if(HAL_FDCAN_AddMessageToTxBuffer(&pdrv_can->fdcanHandle, &pdrv_can->TxHeader, pmsg->data, FDCAN_TX_BUFFER0 + box_num) != HAL_OK)
 	{
 		return -RT_ERROR;
 	}

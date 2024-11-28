@@ -21,6 +21,7 @@ if(WIN32)
 	SET(CMAKE_CXX_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-g++.exe")
 	SET(CMAKE_OBJCOPY "${TOOL_DIR}/bin/arm-none-eabi-objcopy.exe")
 	SET(CMAKE_SIZE "${TOOL_DIR}/bin/arm-none-eabi-size.exe")
+	SET(CMAKE_READ "${TOOL_DIR}/bin/arm-none-eabi-readelf.exe")
 elseif(UNIX)
 	SET(CMAKE_C_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc")
 	SET(CMAKE_ASM_COMPILER "${TOOL_DIR}/bin/arm-none-eabi-gcc")
@@ -246,7 +247,7 @@ ADD_EXECUTABLE(${CMAKE_PROJECT_NAME}.elf
 )
 
 ADD_CUSTOM_COMMAND(TARGET ${CMAKE_PROJECT_NAME}.elf POST_BUILD
-COMMAND ${CMAKE_OBJCOPY} -O binary ${CMAKE_PROJECT_NAME}.elf ${CMAKE_PROJECT_NAME}.bin COMMAND ${CMAKE_OBJCOPY} -O ihex ${CMAKE_PROJECT_NAME}.elf ${EXECUTABLE_OUTPUT_PATH}/${CMAKE_PROJECT_NAME}.hex COMMAND ${CMAKE_SIZE} ${CMAKE_PROJECT_NAME}.elf)
+COMMAND ${CMAKE_OBJCOPY} -O binary ${CMAKE_PROJECT_NAME}.elf ${CMAKE_PROJECT_NAME}.bin COMMAND ${CMAKE_OBJCOPY} -O ihex ${CMAKE_PROJECT_NAME}.elf ${EXECUTABLE_OUTPUT_PATH}/${CMAKE_PROJECT_NAME}.hex COMMAND ${CMAKE_SIZE} ${CMAKE_PROJECT_NAME}.elf COMMAND ${CMAKE_READ} -S ${CMAKE_PROJECT_NAME}.elf)
 
 ADD_CUSTOM_COMMAND(TARGET ${CMAKE_PROJECT_NAME}.elf POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O ihex ${CMAKE_PROJECT_NAME}.elf ${EXECUTABLE_OUTPUT_PATH}/${CMAKE_PROJECT_NAME}.hex
@@ -262,8 +263,8 @@ add_custom_target(flash
 
 add_custom_target(debug
 	DEPENDS ${CMAKE_PROJECT_NAME}.elf
-	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
-	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
+	# COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
+	# COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
 	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
 	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_debug.bat
 )

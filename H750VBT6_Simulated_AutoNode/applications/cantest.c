@@ -97,15 +97,15 @@ int can_test(int argc, char *argv[])
     res = rt_device_open(can_dev, RT_DEVICE_FLAG_INT_TX | RT_DEVICE_FLAG_INT_RX);
     RT_ASSERT(res == RT_EOK);
 
-    thread = rt_thread_create("can_rx", can_rx_thread, RT_NULL, 1024, 25, 10);
-    if (thread != RT_NULL)
-    {
-        rt_thread_startup(thread);
-    }
-    else
-    {
-        rt_kprintf("create can_rx thread failed!\n");
-    }
+    // thread = rt_thread_create("can_rx", can_rx_thread, RT_NULL, 1024, 25, 10);
+    // if (thread != RT_NULL)
+    // {
+    //     rt_thread_startup(thread);
+    // }
+    // else
+    // {
+    //     rt_kprintf("create can_rx thread failed!\n");
+    // }
 
     msg.id = 0x78;
     msg.ide = RT_CAN_STDID;
@@ -140,6 +140,9 @@ int can_test(int argc, char *argv[])
             rt_kprintf("can dev write data failed!\n");
         }
     }
+
+    res = rt_device_close(can_dev);
+    RT_ASSERT(res == RT_EOK);
 
     return res;
 }
@@ -179,7 +182,6 @@ int can_send_one(int argc, char *argv[])
 
     for (rt_uint8_t send_ind = 0; send_ind < 1; send_ind++)
     {
-        rt_thread_mdelay(1000);
         msg.id = 0x123 + send_ind;
         msg.ide = RT_CAN_STDID;
         msg.rtr = RT_CAN_DTR;
@@ -200,8 +202,79 @@ int can_send_one(int argc, char *argv[])
         }
     }
 
+    res = rt_device_close(can_dev);
+    RT_ASSERT(res == RT_EOK);
+
+    return res;
+}
+
+int canfd_send_one(int argc, char *argv[])
+{
+    struct rt_can_msg msg = {0};
+    rt_err_t res;
+    rt_size_t size;
+    rt_thread_t thread;
+    char can_name[RT_NAME_MAX];
+
+    if (argc == 2)
+    {
+        rt_strncpy(can_name, argv[1], RT_NAME_MAX);
+    }
+    else
+    {
+        rt_strncpy(can_name, CAN_DEV_NAME, RT_NAME_MAX);
+    }
+
+    can_dev = rt_device_find(can_name);
+    if (!can_dev)
+    {
+        rt_kprintf("find %s failed!\n", can_name);
+        return RT_ERROR;
+    }
+    else
+    {
+        rt_kprintf("find %s success!\n", can_name);
+    }
+
+    res = rt_device_open(can_dev, RT_DEVICE_FLAG_INT_TX | RT_DEVICE_FLAG_INT_RX);
+    RT_ASSERT(res == RT_EOK);
+
+    for (rt_uint8_t send_ind = 0; send_ind < 1; send_ind++)
+    {
+        msg.id = 0x123 + send_ind;
+        msg.ide = RT_CAN_STDID;
+        msg.rtr = RT_CAN_DTR;
+        msg.fd_frame = 1;
+        msg.len = 10;
+        msg.data[0] = msg.data[0] + 11;
+        msg.data[1] = msg.data[1] + 0x01;
+        msg.data[2] = msg.data[2] + 0x01;
+        msg.data[3] = msg.data[3] + 0x01;
+        msg.data[4] = msg.data[4] + 0x01;
+        msg.data[5] = msg.data[5] + 0x01;
+        msg.data[6] = msg.data[6] + 0x01;
+        msg.data[7] = msg.data[7] + 11;
+        msg.data[8] = msg.data[8] + 0x01;   
+        msg.data[9] = msg.data[9] + 0x01;
+
+        size = rt_device_write(can_dev, 0, &msg, sizeof(msg));
+        if (size == 0)
+        {
+            rt_kprintf("can dev write data failed!\n");
+        }
+        else 
+        {
+            rt_kprintf("can dev write data success!\n");
+        }
+        
+    }
+
+    res = rt_device_close(can_dev);
+    RT_ASSERT(res == RT_EOK);
+
     return res;
 }
 
 MSH_CMD_EXPORT(can_test, can device sample);
 MSH_CMD_EXPORT(can_send_one, can device sample);
+MSH_CMD_EXPORT(canfd_send_one, can device sample);

@@ -18,11 +18,5 @@ int main(void)
 {
     int count = 0;
 
-    while (count++)
-    {
-        LOG_D("Hello CJ RT-Thread! -- %d",count);
-        rt_thread_mdelay(1000);
-    }
-
     return RT_EOK;
 }
