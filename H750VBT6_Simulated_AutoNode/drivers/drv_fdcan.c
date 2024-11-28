@@ -43,7 +43,7 @@ static _stm32_fdcan_t st_DrvCan2=
 static const _stm32_fdcan_NTconfig_t st_CanNTconfig[]=
 /*baud brp sjw tseg1 tseg2*/
 {
-	{CAN1MBaud,     10,8,15,4},
+	{CAN1MBaud,     1,8,31,8},
 	{CAN800kBaud,   10,8,20,4},
 	{CAN500kBaud,   1,16,63,16},
 	{CAN250kBaud,   20,8,35,4},
@@ -629,7 +629,7 @@ void FDCAN2_IT1_IRQHandler(void)             /* FDCAN2 interrupt line 1      */
 static int rt_hw_can_init(void)
 {
     struct can_configure config;
-    config.baud_rate = CAN500kBaud;
+    config.baud_rate = CAN1MBaud;
     config.msgboxsz = 48;
     config.sndboxnumber = 1;
     config.mode = RT_CAN_MODE_NORMAL;

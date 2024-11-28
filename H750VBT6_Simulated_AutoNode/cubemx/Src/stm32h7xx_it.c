@@ -56,6 +56,7 @@
 
 /* External variables --------------------------------------------------------*/
 extern FDCAN_HandleTypeDef hfdcan1;
+extern FDCAN_HandleTypeDef hfdcan2;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -235,6 +236,7 @@ void FDCAN_CAL_IRQHandler(void)
 
   /* USER CODE END FDCAN_CAL_IRQn 0 */
   HAL_FDCAN_IRQHandler(&hfdcan1);
+  HAL_FDCAN_IRQHandler(&hfdcan2);
   /* USER CODE BEGIN FDCAN_CAL_IRQn 1 */
 
   /* USER CODE END FDCAN_CAL_IRQn 1 */
