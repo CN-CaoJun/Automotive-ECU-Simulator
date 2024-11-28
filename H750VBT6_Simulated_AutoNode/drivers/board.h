@@ -363,6 +363,7 @@ extern "C"
 /*#define BSP_USING_ON_CHIP_FLASH*/
 #define BSP_USING_FDCAN
 #define BSP_USING_FDCAN1
+#define BSP_USING_FDCAN2
 
 /*-------------------------- ON_CHIP_FLASH CONFIG END --------------------------*/
 

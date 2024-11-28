@@ -2,7 +2,7 @@
 #include <rtthread.h>
 #include "rtdevice.h"
 
-#define CAN_DEV_NAME "fdcan1" /* CAN 设备名称 */
+#define CAN_DEV_NAME "fdcan2" /* CAN 设备名称 */
 
 static struct rt_semaphore rx_sem; /* 用于接收消息的信号量 */
 static rt_device_t can_dev;        /* CAN 设备句柄 */
@@ -121,15 +121,9 @@ int can_test(int argc, char *argv[])
     msg.data[6] = 0x66;
     msg.data[7] = 0x77;
 
-    size = rt_device_write(can_dev, 0, &msg, sizeof(msg));
-    if (size == 0)
-    {
-        rt_kprintf("can dev write data failed!\n");
-    }
-
     for (rt_uint8_t send_ind = 0; send_ind < 10; send_ind++)
     {
-        rt_thread_mdelay(1000);
+        rt_thread_mdelay(50);
         msg.id = 0x78 + send_ind + 1;
         msg.data[0] = msg.data[0] + 0x01;
         msg.data[1] = msg.data[1] + 0x01;

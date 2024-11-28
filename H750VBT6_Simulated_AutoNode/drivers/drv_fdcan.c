@@ -629,7 +629,7 @@ void FDCAN2_IT1_IRQHandler(void)             /* FDCAN2 interrupt line 1      */
 static int rt_hw_can_init(void)
 {
     struct can_configure config;
-    config.baud_rate = CAN1MBaud;
+    config.baud_rate = CAN500kBaud;
     config.msgboxsz = 48;
     config.sndboxnumber = 1;
     config.mode = RT_CAN_MODE_NORMAL;
