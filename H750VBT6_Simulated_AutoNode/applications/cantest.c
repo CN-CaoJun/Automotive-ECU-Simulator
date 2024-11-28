@@ -47,7 +47,7 @@ static void can_rx_thread(void *parameter)
 
     while (1)
     {
-        rxmsg.hdr = -1;
+        rxmsg.hdr_index = -1;
 
         rt_sem_take(&rx_sem, RT_WAITING_FOREVER);
 
@@ -182,7 +182,7 @@ int can_send_one(int argc, char *argv[])
 
     for (rt_uint8_t send_ind = 0; send_ind < 1; send_ind++)
     {
-        msg.id = 0x123 + send_ind;
+        msg.id = 0x222 + send_ind;
         msg.ide = RT_CAN_STDID;
         msg.rtr = RT_CAN_DTR;
         msg.len = 8;
@@ -241,11 +241,11 @@ int canfd_send_one(int argc, char *argv[])
 
     for (rt_uint8_t send_ind = 0; send_ind < 1; send_ind++)
     {
-        msg.id = 0x123 + send_ind;
+        msg.id = 0x111 + send_ind;
         msg.ide = RT_CAN_STDID;
         msg.rtr = RT_CAN_DTR;
         msg.fd_frame = 1;
-        msg.len = 10;
+        msg.len = 11;
         msg.data[0] = msg.data[0] + 11;
         msg.data[1] = msg.data[1] + 0x01;
         msg.data[2] = msg.data[2] + 0x01;

@@ -286,7 +286,7 @@ struct rt_can_msg
     rt_uint32_t rsv : 1;
     rt_uint32_t len : 8;
     rt_uint32_t priv : 8;
-    rt_int32_t hdr : 8;/*Should be defined as:rx.FilterMatchIndex,which should be changed to rt_int32_t hdr_index : 8*/
+    rt_int32_t hdr_index : 8;/*Should be defined as:rx.FilterMatchIndex,which should be changed to rt_int32_t hdr_index : 8*/
 #ifdef RT_CAN_USING_CANFD
     rt_uint32_t fd_frame : 1;
     rt_uint32_t brs : 1;
