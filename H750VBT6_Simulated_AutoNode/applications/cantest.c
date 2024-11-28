@@ -7,6 +7,18 @@
 static struct rt_semaphore rx_sem; /* 用于接收消息的信号量 */
 static rt_device_t can_dev;        /* CAN 设备句柄 */
 
+
+static rt_uint8_t dlc_to_length(uint8_t dlc) {
+    static const rt_uint8_t dlc_to_len_table[16] = {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64
+    };
+
+    if (dlc > 15) {
+        return 0;
+    }
+
+    return dlc_to_len_table[dlc];
+}
 static rt_err_t can_rx_call(rt_device_t dev, rt_size_t size)
 {
 
@@ -55,13 +67,71 @@ static void can_rx_thread(void *parameter)
 
         rt_kprintf("ID-> %X ", rxmsg.id);
         rt_kprintf("Payload ->");
-        for (i = 0; i < 8; i++)
+        for (i = 0; i < dlc_to_length(rxmsg.len) ; i++)
         {
-            rt_kprintf("%2x", rxmsg.data[i]);
+            rt_kprintf("%02x", rxmsg.data[i]);
         }
 
-        rt_kprintf("\n");
+        rt_kprintf("isfd-%d, isbrs-%d\n", rxmsg.fd_frame, rxmsg.brs);
     }
+}
+
+int can_sample(int argc, char *argv[])
+{
+    struct rt_can_msg msg = {0};
+    rt_err_t res;
+    rt_size_t  size;
+    rt_thread_t thread;
+    char can_name[RT_NAME_MAX];
+ 
+    if (argc == 2)
+    {
+        rt_strncpy(can_name, argv[1], RT_NAME_MAX);
+    }
+    else
+    {
+        rt_strncpy(can_name, CAN_DEV_NAME, RT_NAME_MAX);
+    }
+    can_dev = rt_device_find(can_name);
+    if (!can_dev)
+    {
+        rt_kprintf("find %s failed!\n", can_name);
+        return RT_ERROR;
+    }
+ 
+    rt_sem_init(&rx_sem, "rx_sem", 0, RT_IPC_FLAG_FIFO);
+ 
+    res = rt_device_open(can_dev, RT_DEVICE_FLAG_INT_TX | RT_DEVICE_FLAG_INT_RX);
+    RT_ASSERT(res == RT_EOK);
+    thread = rt_thread_create("can_rx", can_rx_thread, RT_NULL, 1024, 25, 10);
+    if (thread != RT_NULL)
+    {
+        rt_thread_startup(thread);
+    }
+    else
+    {
+        rt_kprintf("create can_rx thread failed!\n");
+    }
+ 
+    msg.id = 0x78;              /* ID 为 0x78 */
+    msg.ide = RT_CAN_STDID;     /* 标准格式 */
+    msg.rtr = RT_CAN_DTR;       /* 数据帧 */
+    msg.len = 8;                /* 数据长度为 8 */
+    msg.data[0] = 0x00;
+    msg.data[1] = 0x11;
+    msg.data[2] = 0x22;
+    msg.data[3] = 0x33;
+    msg.data[4] = 0x44;
+    msg.data[5] = 0x55;
+    msg.data[6] = 0x66;
+    msg.data[7] = 0x77;
+    size = rt_device_write(can_dev, 0, &msg, sizeof(msg));
+    if (size == 0)
+    {
+        rt_kprintf("can dev write data failed!\n");
+    }
+ 
+    return res;
 }
 
 int can_test(int argc, char *argv[])
@@ -141,8 +211,6 @@ int can_test(int argc, char *argv[])
         }
     }
 
-    res = rt_device_close(can_dev);
-    RT_ASSERT(res == RT_EOK);
 
     return res;
 }
@@ -245,7 +313,7 @@ int canfd_send_one(int argc, char *argv[])
         msg.ide = RT_CAN_STDID;
         msg.rtr = RT_CAN_DTR;
         msg.fd_frame = 1;
-        msg.len = 11;
+        msg.len = 15;
         msg.data[0] = msg.data[0] + 11;
         msg.data[1] = msg.data[1] + 0x01;
         msg.data[2] = msg.data[2] + 0x01;
@@ -278,3 +346,4 @@ int canfd_send_one(int argc, char *argv[])
 MSH_CMD_EXPORT(can_test, can device sample);
 MSH_CMD_EXPORT(can_send_one, can device sample);
 MSH_CMD_EXPORT(canfd_send_one, can device sample);
+MSH_CMD_EXPORT(can_sample, can device sample);

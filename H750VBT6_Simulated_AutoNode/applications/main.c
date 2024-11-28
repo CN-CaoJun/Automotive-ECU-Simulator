@@ -18,5 +18,10 @@ int main(void)
 {
     int count = 0;
 
+    int x = 0x200000;
+
+    rt_kprintf("%x\r\n",(x >> 16));
+
+    rt_kprintf("%x\r\n",((x >> 16) && 0x20));
     return RT_EOK;
 }

@@ -54,6 +54,24 @@ static const _stm32_fdcan_NTconfig_t st_CanNTconfig[]=
 	{CAN10kBaud,    400,8,44,5}
 };
 
+//Need to be modified further
+uint8_t length_to_dlc(uint8_t length) {
+    static const uint8_t len_to_dlc_table[65] = {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+		15
+    };
+
+    if (length > 64) {
+        return 15;
+    }
+
+    return len_to_dlc_table[length];
+}
+
 /*
 *function name:_inline_get_NTbaud_index
 *Inf: get can normal transmit baud rate config index
@@ -397,9 +415,9 @@ static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 	pmsg = (struct rt_can_msg *) buf;
 
 	/* Check the parameters */
-	tmp_u32DataLen = pmsg->len;
+	tmp_u32DataLen = length_to_dlc( pmsg->len);
 
-	tmp_u32DataLen <<=16;
+	tmp_u32DataLen <<= 16;
 
 	if(pmsg->ide == RT_CAN_EXTID)
 	{
@@ -421,6 +439,7 @@ static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 
 	
 	pdrv_can->TxHeader.Identifier = pmsg->id;
+
 	pdrv_can->TxHeader.DataLength = tmp_u32DataLen;
 
 
@@ -477,10 +496,16 @@ static int _inline_can_recvmsg(struct rt_can_device *can, void *buf, rt_uint32_t
 		}
     	pmsg->id = pdrv_can->RxHeader.Identifier;
 
-    	pmsg->len = (pdrv_can->RxHeader.DataLength>>16)&0x0f;
+    	pmsg->len = (pdrv_can->RxHeader.DataLength >> 16) & 0x0f;
 
     	pmsg->hdr_index = pdrv_can->RxHeader.FilterIndex;
-    	return RT_EOK;
+
+		#ifdef RT_CAN_USING_CANFD
+		pmsg->fd_frame =  (pdrv_can->RxHeader.FDFormat >> 16) && 0x20;
+		pmsg->brs = (pdrv_can->RxHeader.BitRateSwitch >> 16) && 0x10;;
+		#endif
+    	
+		return RT_EOK;
     }
 }
 
@@ -647,6 +672,10 @@ static int rt_hw_can_init(void)
     config.mode = RT_CAN_MODE_NORMAL;
     config.privmode = RT_CAN_MODE_NOPRIV;
     config.ticks = 50;
+
+#ifdef RT_CAN_USING_HDR
+    config.maxhdr = 14;
+#endif
     /* config default filter */
     FDCAN_FilterTypeDef sFilterConfig;
     sFilterConfig.IdType = FDCAN_STANDARD_ID;

@@ -11,7 +11,9 @@
         "stm32h7xx_hal.h": "c",
         "stm32h7xx_hal_conf.h": "c",
         "kconfig": "cpp",
-        "board.h": "c"
+        "board.h": "c",
+        "rtdbg.h": "c",
+        "thread": "cpp"
     },
     "cortex-debug.variableUseNaturalFormat": false
 }

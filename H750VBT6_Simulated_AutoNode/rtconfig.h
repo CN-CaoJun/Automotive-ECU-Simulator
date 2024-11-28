@@ -89,7 +89,6 @@
 #define RT_USING_SERIAL_V1
 #define RT_SERIAL_RB_BUFSZ 64
 #define RT_USING_CAN
-#define RT_CAN_USING_HDR
 #define RT_CAN_USING_CANFD
 #define RT_USING_PIN
 

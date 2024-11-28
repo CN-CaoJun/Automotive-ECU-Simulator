@@ -209,5 +209,10 @@ int can_send_one(int argc, char *argv[])
     return res;
 }
 
+
+
+
+
+
 MSH_CMD_EXPORT(can_test, can device sample);
 MSH_CMD_EXPORT(can_send_one, can device sample);

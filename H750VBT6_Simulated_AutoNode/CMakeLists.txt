@@ -42,6 +42,25 @@ PROJECT(Simulated-GW-ECU C CXX ASM)
 
 aux_source_directory(applications APP_SRCS)
 
+# # Add Ulog 
+# INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/rt-thread/components/utilities/ulog)
+# INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/rt-thread/components/utilities/ulog/backend)
+# INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/rt-thread/components/utilities/ulog/syslog)
+# aux_source_directory(
+# 	${PROJECT_SOURCE_DIR}/rt-thread/components/utilities/ulog/
+# 	ULOG_SRCS
+# )
+# aux_source_directory(
+# 	${PROJECT_SOURCE_DIR}/rt-thread/components/utilities/ulog/backend
+# 	ULOG_SRCS
+# )
+# aux_source_directory(
+# 	${PROJECT_SOURCE_DIR}/rt-thread/components/utilities/ulog/syslog
+# 	ULOG_SRCS
+# )
+
+# message(STATUS "ULOG_SRCS: ${ULOG_SRCS}")
+
 INCLUDE_DIRECTORIES(
 	.
 	applications
