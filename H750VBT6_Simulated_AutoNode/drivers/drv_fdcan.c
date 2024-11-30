@@ -55,21 +55,26 @@ static const _stm32_fdcan_NTconfig_t st_CanNTconfig[]=
 };
 
 //Need to be modified further
-uint8_t length_to_dlc(uint8_t length) {
-    static const uint8_t len_to_dlc_table[65] = {
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-		15
-    };
-
-    if (length > 64) {
+uint8_t length_to_dlc(uint8_t len) {
+    if (len <= 8) {
+        return len;
+    } else if (len <= 12) {
+        return 9;
+    } else if (len <= 16) {
+        return 10;
+    } else if (len <= 20) {
+        return 11;
+    } else if (len <= 24) {
+        return 12;
+    } else if (len <= 32) {
+        return 13;
+    } else if (len <= 48) {
+        return 14;
+    } else if (len <= 64) {
         return 15;
+    } else {
+        return 15; 
     }
-
-    return len_to_dlc_table[length];
 }
 
 /*

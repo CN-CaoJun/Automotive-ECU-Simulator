@@ -13,7 +13,8 @@
         "kconfig": "cpp",
         "board.h": "c",
         "rtdbg.h": "c",
-        "thread": "cpp"
+        "thread": "cpp",
+        "sstream": "c"
     },
     "cortex-debug.variableUseNaturalFormat": false
 }

@@ -343,7 +343,96 @@ int canfd_send_one(int argc, char *argv[])
     return res;
 }
 
+static rt_uint8_t buf_gen[64] = {0};
+void generate_array(int length)
+{
+    if (length <= 0)
+    {
+        rt_kprintf("Length must be a positive integer.\n");
+        return;
+    }
+
+    if (length > 64)
+    {
+        length = 64;
+    }
+
+    for (size_t i = 0; i < length; i++)
+    {
+        buf_gen[i] = i;
+    }
+
+}
+
+int canfd_args_send(int argc, char *argv[])
+{
+    struct rt_can_msg msg = {0};
+    rt_err_t res;
+    rt_size_t size;
+    rt_thread_t thread;
+    char can_name[RT_NAME_MAX];
+    char *endptr;
+    long CANID;
+
+    if (argc == 5)
+    {
+        rt_strncpy(can_name, argv[1], RT_NAME_MAX);
+    }
+    else
+    {
+        rt_strncpy(can_name, CAN_DEV_NAME, RT_NAME_MAX);
+    }
+
+    can_dev = rt_device_find(can_name);
+    if (!can_dev)
+    {
+        rt_kprintf("find %s failed!\n", can_name);
+        return RT_ERROR;
+    }
+    else
+    {
+        rt_kprintf("find %s success!\n", can_name);
+    }
+    
+    //detect canid
+    errno = 0;  
+    CANID = strtol(argv[2], &endptr, 0);
+
+    int isfd = atoi(argv[3]);
+    int len = atoi(argv[4]);
+
+    res = rt_device_open(can_dev, RT_DEVICE_FLAG_INT_TX | RT_DEVICE_FLAG_INT_RX);
+    RT_ASSERT(res == RT_EOK);
+
+
+        msg.id = CANID;
+        msg.ide = RT_CAN_STDID;
+        msg.rtr = RT_CAN_DTR;
+        msg.fd_frame = isfd;
+        msg.len = len;
+
+        generate_array(len);
+        rt_memcpy(msg.data, buf_gen, len);
+
+        size = rt_device_write(can_dev, 0, &msg, sizeof(msg));
+        if (size == 0)
+        {
+            rt_kprintf("can dev write data failed!\n");
+        }
+        else 
+        {
+            rt_kprintf("can dev write data success!\n");
+        }
+        rt_memset(buf_gen, 0x00, len);
+
+    res = rt_device_close(can_dev);
+    RT_ASSERT(res == RT_EOK);
+
+    return res;
+}
+
 MSH_CMD_EXPORT(can_test, can device sample);
 MSH_CMD_EXPORT(can_send_one, can device sample);
 MSH_CMD_EXPORT(canfd_send_one, can device sample);
 MSH_CMD_EXPORT(can_sample, can device sample);
+MSH_CMD_EXPORT(canfd_args_send, can device sample);
