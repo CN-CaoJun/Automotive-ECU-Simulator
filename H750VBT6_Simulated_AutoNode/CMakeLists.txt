@@ -281,6 +281,12 @@ add_custom_target(flash
 	COMMENT "Running batch script after build"
 )
 
+add_custom_target(reset
+	DEPENDS ${CMAKE_PROJECT_NAME}.elf
+	COMMAND ${CMAKE_COMMAND} -E echo "Executing reset script..."
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_reset.bat
+)
+
 add_custom_target(debug
 	DEPENDS ${CMAKE_PROJECT_NAME}.elf
 	# COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
