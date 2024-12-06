@@ -2,7 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "General Debug",
+            "name": "General Debug (WINDOWS)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program" : "build/Simulated-GW-ECU.elf",
+            "args":[],
+            "stopAtConnect": false,
+            "runToEntryPoint": "main",
+            "cwd": "${workspaceRoot}",
+            "environment":[],
+            "externConsole":false,
+            "MIMode":"gdb",
+            "miDebuggerPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-6-2017-q2-update/bin/arm-none-eabi-gdb",
+            "miDebuggerServerAddress": "localhost:3333"
+        },
+        {
+            "name": "General Debug (Unix)",
             "type": "cppdbg",
             "request": "launch",
             "program" : "build/Simulated-GW-ECU.elf",
@@ -17,7 +32,7 @@
             "miDebuggerServerAddress": "localhost:3333"
         },
         {
-            "name": "Openocd Debug",
+            "name": "Openocd Debug (WINDOWS)",
             "cwd": "${workspaceFolder}",
             // "runToMain": true,
             "runToEntryPoint": "rt_hw_board_init",
@@ -37,7 +52,7 @@
             "gdbPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
         },
         {
-            "name": "Pyocd Debug",
+            "name": "Pyocd Debug (WINDOWS)",
             "cwd": "${workspaceFolder}",
             "executable": "build/Simulated-GW-ECU.elf",
             "request": "launch",
@@ -51,5 +66,20 @@
             "armToolchainPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin",
             "gdbPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
         },
+        {
+            "name": "Pyocd Debug (Unix)",
+            "cwd": "${workspaceFolder}",
+            "executable": "build/Simulated-GW-ECU.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "targetId": "STM32H750VBTx",
+            "showDevDebugOutput": "none",
+            "svdFile": "STM32H750x.svd",
+            "servertype": "pyocd",
+            "serverpath": "/home/caojun/miniconda3/envs/can/bin/pyocd",
+            "armToolchainPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-6-2017-q2-update/bin",
+            "gdbPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-6-2017-q2-update/bin/arm-none-eabi-gdb",
+        }
     ]
 }
