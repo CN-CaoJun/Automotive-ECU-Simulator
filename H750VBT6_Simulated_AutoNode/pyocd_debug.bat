@@ -3,4 +3,5 @@
 @REM pyocd reset
 @REM echo Starting Debuging
 pyocd  gdbserver -t STM32H750VBTx 
+@REM pyocd  gdbserver -t STM32H750VBTx 
 pause
