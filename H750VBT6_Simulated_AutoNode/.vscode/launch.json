@@ -28,7 +28,7 @@
             "environment":[],
             "externConsole":false,
             "MIMode":"gdb",
-            "miDebuggerPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
+            "miDebuggerPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gdb",
             "miDebuggerServerAddress": "localhost:3333"
         },
         {
@@ -50,6 +50,26 @@
             "svdFile": "STM32H750x.svd",
             "armToolchainPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin",
             "gdbPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
+        },
+        {
+            "name": "Openocd Debug (Unix)",
+            "cwd": "${workspaceFolder}",
+            // "runToMain": true,
+            "runToEntryPoint": "rt_hw_board_init",
+            "executable": "build/Simulated-GW-ECU.elf",       
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "interface":"swd",
+            "device": "STM32H750x",                
+            "configFiles": [
+                "openocd-scripts/interface/cmsis-dap.cfg",          
+                "openocd-scripts/target/stm32h7x_1M.cfg",         
+
+            ],
+            "svdFile": "STM32H750x.svd",
+            "armToolchainPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin",
+            "gdbPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gdb",
         },
         {
             "name": "Pyocd Debug (WINDOWS)",
@@ -78,8 +98,8 @@
             "svdFile": "STM32H750x.svd",
             "servertype": "pyocd",
             "serverpath": "/home/caojun/miniconda3/envs/can/bin/pyocd",
-            "armToolchainPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-6-2017-q2-update/bin",
-            "gdbPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-6-2017-q2-update/bin/arm-none-eabi-gdb",
+            "armToolchainPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin",
+            "gdbPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gdb",
         }
     ]
 }

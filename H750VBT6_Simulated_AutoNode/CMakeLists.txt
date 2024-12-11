@@ -295,16 +295,22 @@ add_custom_target(debug
 	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_debug.bat
 )
 
-add_custom_target(oflash
-	DEPENDS ${CMAKE_PROJECT_NAME}.elf
-	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
-	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.bat
-
-)
+if(WIN32)
+    add_custom_target(oflash
+        DEPENDS ${CMAKE_PROJECT_NAME}.elf
+        COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
+        COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.bat
+    )
+else()
+    add_custom_target(oflash
+        DEPENDS ${CMAKE_PROJECT_NAME}.elf
+        COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
+        COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts bash ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.sh
+    )
+endif()
 
 add_custom_target(odebug
 	DEPENDS ${CMAKE_PROJECT_NAME}.elf
 	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_debug"
 	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/debug.bat
-
 )
