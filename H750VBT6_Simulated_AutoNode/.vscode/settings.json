@@ -14,7 +14,8 @@
         "board.h": "c",
         "rtdbg.h": "c",
         "thread": "cpp",
-        "sstream": "c"
+        "sstream": "c",
+        "rtthread.h": "c"
     },
     "cortex-debug.variableUseNaturalFormat": false
 }

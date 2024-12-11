@@ -297,7 +297,7 @@ struct rt_can_msg
     rt_uint32_t reserved : 6;
 #endif
 #ifdef RT_CAN_USING_CANFD
-    rt_uint8_t data[64];
+    rt_uint8_t data[8];
 #else
     rt_uint8_t data[8];
 #endif

@@ -61,6 +61,13 @@ aux_source_directory(applications APP_SRCS)
 
 # message(STATUS "ULOG_SRCS: ${ULOG_SRCS}")
 
+#Add ISOTP sources
+INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/applications/isotp/inc)
+aux_source_directory(
+	${PROJECT_SOURCE_DIR}/applications/isotp/src
+	ISOTP_SRCS
+)
+
 INCLUDE_DIRECTORIES(
 	.
 	applications
@@ -261,6 +268,7 @@ LINK_LIBRARIES(
 )
 
 ADD_EXECUTABLE(${CMAKE_PROJECT_NAME}.elf 
+				${ISOTP_SRCS}
 				${APP_SRCS} 
 				${PROJECT_SOURCES}
 )
