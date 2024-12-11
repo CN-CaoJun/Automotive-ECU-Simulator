@@ -15,7 +15,10 @@
         "rtdbg.h": "c",
         "thread": "cpp",
         "sstream": "c",
-        "rtthread.h": "c"
+        "rtthread.h": "c",
+        "array": "c",
+        "string": "c",
+        "string_view": "c"
     },
     "cortex-debug.variableUseNaturalFormat": false
 }

@@ -31,6 +31,8 @@ static rt_device_t can_dev;
 static uint8_t isfdcan1open = 0;
 static uint8_t isfdcan2open = 0;
 
+static uint8_t sendbuf[100] = {0x00};
+
 #define DEVICEOPEN 1
 #define DEVICECLOSE 0
 static rt_uint8_t dlc_to_length(uint8_t dlc)
@@ -55,9 +57,9 @@ static rt_err_t can_rx_call(rt_device_t dev, rt_size_t size)
     return RT_EOK;
 }
 
-    uint8_t payload[4095] = {0};
-    uint16_t payload_size = 0;
-    uint16_t out_size = 0;
+uint8_t payload[4095] = {0};
+uint16_t payload_size = 0;
+uint16_t out_size = 0;
 static void cantp_rx_thread(void *parameter)
 {
     int i;
@@ -71,15 +73,14 @@ static void cantp_rx_thread(void *parameter)
     {
         rxmsg.hdr_index = -1;
 
-        rt_sem_take(&tprx_sem, RT_WAITING_FOREVER);
+        rt_sem_take(&tprx_sem, RT_WAITING_NO);
 
         if (isfdcan1open == DEVICEOPEN)
         {
             size_t read_size = rt_device_read(can_dev, 0, &rxmsg, sizeof(rxmsg));
             if (read_size == sizeof(rxmsg))
             {
-                rt_kprintf("ID-> %X ", rxmsg.id);
-                // rt_kprintf("Payload ->");
+                rt_kprintf("RX ID-> %X ", rxmsg.id);
                 for (i = 0; i < dlc_to_length(rxmsg.len); i++)
                 {
                     rt_kprintf("%02x", rxmsg.data[i]);
@@ -94,14 +95,24 @@ static void cantp_rx_thread(void *parameter)
             ret = isotp_receive(&g_link, payload, payload_size, &out_size);
             if (ISOTP_RET_OK == ret)
             {
-                rt_kprintf("Received OK!!!\n");
+                rt_kprintf("Received %d bytes !!! \n",out_size);
+                uint16_t send_size = ((payload[0] << 8) | payload[1]);
+                rt_kprintf("Will Send  %d bytes !!! \n",send_size);
+                ret = isotp_send(&g_link, sendbuf, send_size);
             }
+            else
+            {
+                // rt_kprintf("Received not complete!!!\n");
+            }
+        
+            isotp_poll(&g_link);
+
         }
     }
 }
 
 int rt_can_send(const uint32_t arbitration_id,
-                 const uint8_t *data, const uint8_t DLC)
+                const uint8_t *data, const uint8_t DLC)
 {
     struct rt_can_msg msg = {0};
     rt_err_t res;
@@ -113,18 +124,25 @@ int rt_can_send(const uint32_t arbitration_id,
         msg.ide = RT_CAN_STDID;
         msg.rtr = RT_CAN_DTR;
         msg.len = 8;
-        
+
         memcpy(msg.data, data, DLC);
 
         size = rt_device_write(can_dev, 0, &msg, sizeof(msg));
         if (size == 0)
         {
             rt_kprintf("can dev write data failed!\n");
-            res = RT_EOK; 
+            res = RT_ERROR;
         }
         else
         {
-            res = RT_ERROR; 
+            rt_kprintf("TX ID-> %X ", msg.id);
+            // rt_kprintf("Payload ->");
+            for (int i = 0; i < dlc_to_length(msg.len); i++)
+            {
+                rt_kprintf("%02x", msg.data[i]);
+            }
+            rt_kprintf("\r\n");
+            res = RT_EOK;
         }
     }
 
@@ -138,14 +156,15 @@ int cantp_tx_thread(void)
     {
         if (isfdcan1open == DEVICEOPEN)
         {
-            isotp_poll(&g_link);
+            // isotp_poll(&g_link);
+            // rt_thread_mdelay(5);
         }
     }
 
     return;
 }
 
-int rtcan_node_start(int argc, char *argv[])
+int rtcan_node_start()
 {
     struct rt_can_msg msg = {0};
     rt_err_t res;
@@ -153,26 +172,17 @@ int rtcan_node_start(int argc, char *argv[])
     rt_thread_t thread;
     char can_name[RT_NAME_MAX];
 
-
     isotp_init_link(&g_link, 0x739,
                     g_isotpSendBuf, sizeof(g_isotpSendBuf),
                     g_isotpRecvBuf, sizeof(g_isotpRecvBuf));
-
-    uint8_t sendbuf[100] = {0x00};
 
     for (int i = 0; i < 100; i++)
     {
         sendbuf[i] = i + 1;
     }
 
-    if (argc == 2)
-    {
-        rt_strncpy(can_name, argv[1], RT_NAME_MAX);
-    }
-    else
-    {
-        rt_strncpy(can_name, CAN_DEV_NAME, RT_NAME_MAX);
-    }
+    rt_strncpy(can_name, CAN_DEV_NAME, RT_NAME_MAX);
+
     can_dev = rt_device_find(can_name);
 
     if (!can_dev)
@@ -202,17 +212,6 @@ int rtcan_node_start(int argc, char *argv[])
     else
     {
         rt_kprintf("create cantp_rx thread failed!\n");
-    }
-
-    thread = rt_thread_create("cantp_tx", cantp_tx_thread, RT_NULL, 1024, 25, 10);
-    if (thread != RT_NULL)
-    {
-        rt_thread_startup(thread);
-        rt_kprintf("create cantp_tx thread success!\n");
-    }
-    else
-    {
-        rt_kprintf("create cantp_tx thread failed!\n");
     }
 
     return res;

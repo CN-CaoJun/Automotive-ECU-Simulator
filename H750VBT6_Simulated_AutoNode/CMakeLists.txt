@@ -130,6 +130,7 @@ SET(PROJECT_SOURCES
 	rt-thread/components/finsh/msh_parse.c
 	rt-thread/components/finsh/cmd.c
 	rt-thread/src/clock.c
+	rt-thread/src/signal.c
 	rt-thread/src/components.c
 	rt-thread/src/idle.c
 	rt-thread/src/ipc.c
@@ -283,42 +284,49 @@ ADD_CUSTOM_COMMAND(TARGET ${CMAKE_PROJECT_NAME}.elf POST_BUILD
 )
 
 add_custom_target(flash
-	DEPENDS ${CMAKE_PROJECT_NAME}.elf
-	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash script..."
-	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
-	COMMENT "Running batch script after build"
-)
+		DEPENDS ${CMAKE_PROJECT_NAME}.elf
+		COMMAND ${CMAKE_COMMAND} -E echo "Executing flash script..."
+		COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
+		COMMENT "Running batch script after build"
+	)
 
 add_custom_target(reset
-	DEPENDS ${CMAKE_PROJECT_NAME}.elf
-	COMMAND ${CMAKE_COMMAND} -E echo "Executing reset script..."
-	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_reset.bat
-)
+		DEPENDS ${CMAKE_PROJECT_NAME}.elf
+		COMMAND ${CMAKE_COMMAND} -E echo "Executing reset script..."
+		COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_reset.bat
+	)
 
 add_custom_target(debug
-	DEPENDS ${CMAKE_PROJECT_NAME}.elf
-	# COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
-	# COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
-	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
-	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_debug.bat
-)
+		DEPENDS ${CMAKE_PROJECT_NAME}.elf
+		# COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
+		# COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_flash.bat
+		COMMAND ${CMAKE_COMMAND} -E echo "Executing flash debug script..."
+		COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}  ${CMAKE_SOURCE_DIR}/pyocd_debug.bat
+	)
 
-if(WIN32)
-    add_custom_target(oflash
-        DEPENDS ${CMAKE_PROJECT_NAME}.elf
-        COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
-        COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.bat
-    )
-else()
-    add_custom_target(oflash
-        DEPENDS ${CMAKE_PROJECT_NAME}.elf
-        COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
-        COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts bash ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.sh
-    )
-endif()
+
+add_custom_target(oflash
+		DEPENDS ${CMAKE_PROJECT_NAME}.elf
+		COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
+		COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.bat
+	)
 
 add_custom_target(odebug
-	DEPENDS ${CMAKE_PROJECT_NAME}.elf
-	COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_debug"
-	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/debug.bat
-)
+		DEPENDS ${CMAKE_PROJECT_NAME}.elf
+		COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_debug"
+		COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/debug.bat
+	)
+
+# if(WIN32)
+# 	add_custom_target(oflash
+# 		DEPENDS ${CMAKE_PROJECT_NAME}.elf
+# 		COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
+# 		COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts  ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.bat
+# 	)
+# else()
+#     add_custom_target(oflash
+#         DEPENDS ${CMAKE_PROJECT_NAME}.elf
+#         COMMAND ${CMAKE_COMMAND} -E echo "Executing flash openocd_flash"
+#         COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/openocd-scripts bash ${CMAKE_SOURCE_DIR}/openocd-scripts/flash.sh
+#     )
+# endif()

@@ -21,8 +21,13 @@ int  isotp_user_send_can(const uint32_t arbitration_id,
                          const uint8_t* data, const uint8_t DLC)
 {
     rt_err_t res;
+
     res = rt_can_send(arbitration_id, data, DLC);
-    return 0;
+    if (res != RT_EOK)
+    {
+        return ISOTP_RET_ERROR;
+    }
+    return ISOTP_RET_OK;
 }
 
 /* user implemented, get millisecond */

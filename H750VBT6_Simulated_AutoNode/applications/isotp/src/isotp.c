@@ -2,6 +2,9 @@
 #include "assert.h"
 #include "isotp.h"
 
+#include <rtthread.h> 
+
+
 ///////////////////////////////////////////////////////
 ///                 STATIC FUNCTIONS                ///
 ///////////////////////////////////////////////////////
@@ -285,9 +288,15 @@ int isotp_send_with_id(IsoTpLink *link, uint32_t id, const uint8_t payload[], ui
 }
 
 void isotp_on_can_message(IsoTpLink *link, uint8_t *data, uint8_t len) {
+    static uint8_t counter = 0;
+    static uint8_t cs_counter = 0;
+
     IsoTpCanMessage message;
     int ret;
-    
+
+    counter++;
+    // rt_kprintf("enter isotp_on_can_message %d\n",counter);
+
     if (len < 2 || len > 8) {
         return;
     }
@@ -344,6 +353,7 @@ void isotp_on_can_message(IsoTpLink *link, uint8_t *data, uint8_t len) {
                 isotp_send_flow_control(link, PCI_FLOW_STATUS_CONTINUE, link->receive_bs_count, ISO_TP_DEFAULT_ST_MIN);
                 /* refresh timer cs */
                 link->receive_timer_cr = isotp_user_get_ms() + ISO_TP_DEFAULT_RESPONSE_TIMEOUT;
+                // rt_kprintf("first set link->receive_timer_cr %d\n",link->receive_timer_cr);
             }
             
             break;
@@ -354,6 +364,9 @@ void isotp_on_can_message(IsoTpLink *link, uint8_t *data, uint8_t len) {
                 link->receive_protocol_result = ISOTP_PROTOCOL_RESULT_UNEXP_PDU;
                 break;
             }
+            
+            cs_counter++;
+            // rt_kprintf("enter CSFRAME %d\n",cs_counter);
 
             /* handle message */
             ret = isotp_receive_consecutive_frame(link, &message, len);
@@ -440,9 +453,9 @@ int isotp_receive(IsoTpLink *link, uint8_t *payload, const uint16_t payload_size
     }
 
     copylen = link->receive_size;
-    if (copylen > payload_size) {
-        copylen = payload_size;
-    }
+    // if (copylen > payload_size) {
+    //     copylen = payload_size;
+    // }
 
     memcpy(payload, link->receive_buffer, copylen);
     *out_size = copylen;
@@ -491,6 +504,7 @@ void isotp_poll(IsoTpLink *link) {
                 /* check if send finish */
                 if (link->send_offset >= link->send_size) {
                     link->send_status = ISOTP_SEND_STATUS_IDLE;
+                    rt_kprintf("Send cantp pcaket finished\r\n");
                 }
             } else {
                 link->send_status = ISOTP_SEND_STATUS_ERROR;
@@ -511,6 +525,8 @@ void isotp_poll(IsoTpLink *link) {
     /* only polling when operation in progress */
     if (ISOTP_RECEIVE_STATUS_INPROGRESS == link->receive_status) {
         
+        // rt_kprintf("%d, %d\r\n",isotp_user_get_ms(),link->receive_timer_cr);
+
         /* check timeout */
         if (IsoTpTimeAfter(isotp_user_get_ms(), link->receive_timer_cr)) {
             link->receive_protocol_result = ISOTP_PROTOCOL_RESULT_TIMEOUT_CR;

@@ -14,8 +14,10 @@
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
 
+extern int rtcan_node_start(void);
+
 int main(void)
 {
-    int count = 0;
+    rtcan_node_start();
     return RT_EOK;
 }
