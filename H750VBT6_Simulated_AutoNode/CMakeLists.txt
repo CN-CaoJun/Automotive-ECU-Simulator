@@ -69,7 +69,6 @@ aux_source_directory(
 )
 
 INCLUDE_DIRECTORIES(
-	.
 	applications
 	drivers
 	drivers/include
@@ -82,7 +81,11 @@ INCLUDE_DIRECTORIES(
 	rt-thread/components/libc/compilers/common/include
 	rt-thread/components/libc/compilers/newlib
 	rt-thread/components/drivers/include
+	rt-thread/components/dfs/dfs_v1/include
+	rt-thread/components/dfs/dfs_v1/filesystems/devfs
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat
 	rt-thread/components/finsh
+	.
 	rt-thread/include
 	rt-thread/libcpu/arm/common
 	rt-thread/libcpu/arm/cortex-m7
@@ -113,6 +116,7 @@ SET(PROJECT_SOURCES
 	rt-thread/components/libc/compilers/common/cunistd.c
 	rt-thread/components/libc/compilers/common/cwchar.c
 	rt-thread/components/libc/compilers/newlib/syscalls.c
+	rt-thread/components/drivers/can/can.c
 	rt-thread/components/drivers/core/device.c
 	rt-thread/components/drivers/ipc/completion.c
 	rt-thread/components/drivers/ipc/condvar.c
@@ -123,14 +127,27 @@ SET(PROJECT_SOURCES
 	rt-thread/components/drivers/ipc/waitqueue.c
 	rt-thread/components/drivers/ipc/workqueue.c
 	rt-thread/components/drivers/pin/pin.c
+	rt-thread/components/drivers/sdio/block_dev.c
+	rt-thread/components/drivers/sdio/gpt.c
+	rt-thread/components/drivers/sdio/mmc.c
+	rt-thread/components/drivers/sdio/mmcsd_core.c
+	rt-thread/components/drivers/sdio/sd.c
+	rt-thread/components/drivers/sdio/sdio.c
 	rt-thread/components/drivers/serial/serial.c
-	rt-thread/components/drivers/can/can.c
-	rt-thread/components/finsh/shell.c
-	rt-thread/components/finsh/msh.c
+	rt-thread/components/dfs/dfs_v1/filesystems/devfs/devfs.c
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/dfs_elm.c
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/ff.c
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/ffunicode.c
+	rt-thread/components/dfs/dfs_v1/src/dfs.c
+	rt-thread/components/dfs/dfs_v1/src/dfs_file.c
+	rt-thread/components/dfs/dfs_v1/src/dfs_fs.c
+	rt-thread/components/dfs/dfs_v1/src/dfs_posix.c
 	rt-thread/components/finsh/msh_parse.c
+	rt-thread/components/finsh/shell.c
 	rt-thread/components/finsh/cmd.c
+	rt-thread/components/finsh/msh.c
+	rt-thread/components/finsh/msh_file.c
 	rt-thread/src/clock.c
-	rt-thread/src/signal.c
 	rt-thread/src/components.c
 	rt-thread/src/idle.c
 	rt-thread/src/ipc.c
@@ -143,6 +160,7 @@ SET(PROJECT_SOURCES
 	rt-thread/src/object.c
 	rt-thread/src/scheduler_comm.c
 	rt-thread/src/scheduler_up.c
+	rt-thread/src/signal.c
 	rt-thread/src/thread.c
 	rt-thread/src/timer.c
 	rt-thread/libcpu/arm/common/div0.c
