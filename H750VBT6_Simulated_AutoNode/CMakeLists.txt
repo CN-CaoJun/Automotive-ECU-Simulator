@@ -93,6 +93,8 @@ INCLUDE_DIRECTORIES(
 	rt-thread/components/libc/posix/io/eventfd
 	rt-thread/components/libc/posix/io/poll
 	rt-thread/components/libc/posix/ipc
+	rt-thread/components/utilities/ulog
+	rt-thread/components/utilities/ulog/syslog
 	cubemx
 	cubemx/Inc
 )
@@ -108,7 +110,9 @@ ADD_DEFINITIONS(
 )
 
 SET(PROJECT_SOURCES
-	cubemx/Src/stm32h7xx_hal_msp.c
+	applications/cantest.c
+	applications/main.c
+	applications/isotp_node.c
 	rt-thread/components/libc/compilers/common/cctype.c
 	rt-thread/components/libc/compilers/common/cstdlib.c
 	rt-thread/components/libc/compilers/common/cstring.c
@@ -142,11 +146,11 @@ SET(PROJECT_SOURCES
 	rt-thread/components/dfs/dfs_v1/src/dfs_file.c
 	rt-thread/components/dfs/dfs_v1/src/dfs_fs.c
 	rt-thread/components/dfs/dfs_v1/src/dfs_posix.c
-	rt-thread/components/finsh/msh_parse.c
-	rt-thread/components/finsh/shell.c
+	rt-thread/components/finsh/msh_file.c
 	rt-thread/components/finsh/cmd.c
 	rt-thread/components/finsh/msh.c
-	rt-thread/components/finsh/msh_file.c
+	rt-thread/components/finsh/msh_parse.c
+	rt-thread/components/finsh/shell.c
 	rt-thread/src/clock.c
 	rt-thread/src/components.c
 	rt-thread/src/idle.c
@@ -168,6 +172,9 @@ SET(PROJECT_SOURCES
 	rt-thread/libcpu/arm/cortex-m7/context_gcc.S
 	rt-thread/libcpu/arm/cortex-m7/cpu_cache.c
 	rt-thread/libcpu/arm/cortex-m7/cpuport.c
+	rt-thread/components/utilities/ulog/backend/console_be.c
+	rt-thread/components/utilities/ulog/syslog/syslog.c
+	rt-thread/components/utilities/ulog/ulog.c
 	drivers/board.c
 	drivers/drv_adc.c
 	drivers/drv_clk.c

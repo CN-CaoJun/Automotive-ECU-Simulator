@@ -26,6 +26,7 @@
 #define RT_USING_DEBUG
 #define RT_DEBUGING_COLOR
 #define RT_DEBUGING_CONTEXT
+#define RT_DEBUGING_AUTO_INIT
 
 /* Inter-Thread communication */
 
@@ -163,6 +164,22 @@
 
 /* Utilities */
 
+#define RT_USING_ULOG
+#define ULOG_OUTPUT_LVL_DEBUG
+#define ULOG_OUTPUT_LVL 7
+#define ULOG_ASSERT_ENABLE
+#define ULOG_LINE_BUF_SIZE 128
+
+/* log format */
+
+#define ULOG_OUTPUT_TIME
+#define ULOG_TIME_USING_TIMESTAMP
+#define ULOG_OUTPUT_LEVEL
+#define ULOG_OUTPUT_TAG
+/* end of log format */
+#define ULOG_BACKEND_USING_CONSOLE
+#define ULOG_USING_FILTER
+#define ULOG_USING_SYSLOG
 /* end of Utilities */
 /* end of RT-Thread Components */
 

@@ -266,7 +266,7 @@ extern "C"
  *
  */
 
-/*#define BSP_USING_SDIO*/
+#define BSP_USING_SDIO
 
 /*-------------------------- SDIO CONFIG END --------------------------*/
 
