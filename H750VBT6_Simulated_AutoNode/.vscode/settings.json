@@ -18,7 +18,9 @@
         "rtthread.h": "c",
         "array": "c",
         "string": "c",
-        "string_view": "c"
+        "string_view": "c",
+        "ulog.h": "c",
+        "syslog.h": "c"
     },
     "cortex-debug.variableUseNaturalFormat": false
 }

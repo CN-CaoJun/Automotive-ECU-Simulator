@@ -114,7 +114,7 @@ static rt_err_t _control_rtc(int cmd, void *arg)
     }
     return rst;
 #else
-    LOG_W(_WARNING_NO_RTC);
+    // LOG_W(_WARNING_NO_RTC);
     return -RT_ENOSYS;
 #endif /* RT_USING_RTC */
 }

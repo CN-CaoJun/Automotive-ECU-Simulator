@@ -10,6 +10,10 @@
 #include <rtthread.h>
 #include "rtdevice.h"
 
+#define LOG_TAG              "isotp"
+#define LOG_LVL              LOG_LVL_DBG
+#include <ulog.h>
+
 #define RET_OK 0
 #define RET_NOK 1
 #define RET_ERR 2
@@ -80,12 +84,11 @@ static void cantp_rx_thread(void *parameter)
             size_t read_size = rt_device_read(can_dev, 0, &rxmsg, sizeof(rxmsg));
             if (read_size == sizeof(rxmsg))
             {
-                rt_kprintf("RX ID-> %X ", rxmsg.id);
+                LOG_D("RX ID-> %X ", rxmsg.id);
                 for (i = 0; i < dlc_to_length(rxmsg.len); i++)
                 {
-                    rt_kprintf("%02x", rxmsg.data[i]);
+                    LOG_D("%02x", rxmsg.data[i]);
                 }
-                rt_kprintf("\r\n");
                 if (0x731 == rxmsg.id)
                 {
                     isotp_on_can_message(&g_link, rxmsg.data, dlc_to_length(rxmsg.len));
@@ -95,14 +98,14 @@ static void cantp_rx_thread(void *parameter)
             ret = isotp_receive(&g_link, payload, payload_size, &out_size);
             if (ISOTP_RET_OK == ret)
             {
-                rt_kprintf("Received %d bytes !!! \n",out_size);
+                LOG_D("Received %d bytes !!! ",out_size);
                 uint16_t send_size = ((payload[0] << 8) | payload[1]);
-                rt_kprintf("Will Send  %d bytes !!! \n",send_size);
+                LOG_D("Will Send  %d bytes !!! ",send_size);
                 ret = isotp_send(&g_link, sendbuf, send_size);
             }
             else
             {
-                // rt_kprintf("Received not complete!!!\n");
+                // LOG_D("Received not complete!!!");
             }
         
             isotp_poll(&g_link);
@@ -130,18 +133,17 @@ int rt_can_send(const uint32_t arbitration_id,
         size = rt_device_write(can_dev, 0, &msg, sizeof(msg));
         if (size == 0)
         {
-            rt_kprintf("can dev write data failed!\n");
+            LOG_D("can dev write data failed!");
             res = RT_ERROR;
         }
         else
         {
-            rt_kprintf("TX ID-> %X ", msg.id);
-            // rt_kprintf("Payload ->");
+            LOG_D("TX ID-> %X ", msg.id);
+            // LOG_D("Payload ->");
             for (int i = 0; i < dlc_to_length(msg.len); i++)
             {
-                rt_kprintf("%02x", msg.data[i]);
+                LOG_D("%02x", msg.data[i]);
             }
-            rt_kprintf("\r\n");
             res = RT_EOK;
         }
     }
@@ -161,7 +163,7 @@ int cantp_tx_thread(void)
         }
     }
 
-    return;
+    return 0;
 }
 
 int rtcan_node_start()
@@ -187,12 +189,12 @@ int rtcan_node_start()
 
     if (!can_dev)
     {
-        rt_kprintf("find %s failed!\n", can_name);
+        LOG_D("find %s failed!", can_name);
         return RT_ERROR;
     }
     else
     {
-        rt_kprintf("find %s success!\n", can_name);
+        LOG_D("find %s success!", can_name);
     }
 
     rt_sem_init(&tprx_sem, "tprx_sem", 0, RT_IPC_FLAG_FIFO);
@@ -207,11 +209,11 @@ int rtcan_node_start()
     if (thread != RT_NULL)
     {
         rt_thread_startup(thread);
-        rt_kprintf("create cantp_rx thread success!\n");
+        LOG_D("create cantp_rx thread success!");
     }
     else
     {
-        rt_kprintf("create cantp_rx thread failed!\n");
+        LOG_D("create cantp_rx thread failed!");
     }
 
     return res;
