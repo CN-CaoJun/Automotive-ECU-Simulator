@@ -173,9 +173,9 @@
 /* log format */
 
 #define ULOG_OUTPUT_TIME
-#define ULOG_TIME_USING_TIMESTAMP
 #define ULOG_OUTPUT_LEVEL
 #define ULOG_OUTPUT_TAG
+#define ULOG_OUTPUT_THREAD_NAME
 /* end of log format */
 #define ULOG_BACKEND_USING_CONSOLE
 #define ULOG_USING_FILTER

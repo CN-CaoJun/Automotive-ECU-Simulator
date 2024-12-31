@@ -250,14 +250,6 @@ rt_err_t rt_device_open(rt_device_t dev, rt_uint16_t oflag)
         return -RT_EBUSY;
     }
 
-    uint16_t flags11 = (dev->open_flag & RT_DEVICE_OFLAG_MASK);
-    uint16_t flags12 = (oflag & RT_DEVICE_OFLAG_MASK);
-
-    if (flags11 != flags12)
-    {
-        __asm__ volatile ("nop");
-    }
-    
     /* device is not opened or opened by other oflag, call device_open interface */
     if (!(dev->open_flag & RT_DEVICE_OFLAG_OPEN) ||
          ((dev->open_flag & RT_DEVICE_OFLAG_MASK) != (oflag & RT_DEVICE_OFLAG_MASK)))

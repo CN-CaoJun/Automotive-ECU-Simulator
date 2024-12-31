@@ -81,6 +81,9 @@ INCLUDE_DIRECTORIES(
 	rt-thread/components/libc/compilers/common/include
 	rt-thread/components/libc/compilers/newlib
 	rt-thread/components/drivers/include
+	rt-thread/components/dfs/dfs_v1/include
+	rt-thread/components/dfs/dfs_v1/filesystems/devfs
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat
 	rt-thread/components/finsh
 	.
 	rt-thread/include
@@ -90,6 +93,8 @@ INCLUDE_DIRECTORIES(
 	rt-thread/components/libc/posix/io/eventfd
 	rt-thread/components/libc/posix/io/poll
 	rt-thread/components/libc/posix/ipc
+	rt-thread/components/utilities/ulog
+	rt-thread/components/utilities/ulog/syslog
 	cubemx
 	cubemx/Inc
 )
@@ -124,13 +129,26 @@ SET(PROJECT_SOURCES
 	rt-thread/components/drivers/ipc/waitqueue.c
 	rt-thread/components/drivers/ipc/workqueue.c
 	rt-thread/components/drivers/pin/pin.c
+	rt-thread/components/drivers/sdio/block_dev.c
+	rt-thread/components/drivers/sdio/gpt.c
+	rt-thread/components/drivers/sdio/mmc.c
+	rt-thread/components/drivers/sdio/mmcsd_core.c
+	rt-thread/components/drivers/sdio/sd.c
+	rt-thread/components/drivers/sdio/sdio.c
 	rt-thread/components/drivers/serial/serial.c
-	
-        
-	rt-thread/components/finsh/msh_parse.c
-	rt-thread/components/finsh/shell.c
+	rt-thread/components/dfs/dfs_v1/filesystems/devfs/devfs.c
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/dfs_elm.c
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/ff.c
+	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/ffunicode.c
+	rt-thread/components/dfs/dfs_v1/src/dfs.c
+	rt-thread/components/dfs/dfs_v1/src/dfs_file.c
+	rt-thread/components/dfs/dfs_v1/src/dfs_fs.c
+	rt-thread/components/dfs/dfs_v1/src/dfs_posix.c
+	rt-thread/components/finsh/msh_file.c
 	rt-thread/components/finsh/cmd.c
 	rt-thread/components/finsh/msh.c
+	rt-thread/components/finsh/msh_parse.c
+	rt-thread/components/finsh/shell.c
 	rt-thread/src/clock.c
 	rt-thread/src/components.c
 	rt-thread/src/idle.c
@@ -152,6 +170,9 @@ SET(PROJECT_SOURCES
 	rt-thread/libcpu/arm/cortex-m7/context_gcc.S
 	rt-thread/libcpu/arm/cortex-m7/cpu_cache.c
 	rt-thread/libcpu/arm/cortex-m7/cpuport.c
+	rt-thread/components/utilities/ulog/backend/console_be.c
+	rt-thread/components/utilities/ulog/syslog/syslog.c
+	rt-thread/components/utilities/ulog/ulog.c
 	drivers/board.c
 	drivers/drv_adc.c
 	drivers/drv_clk.c
