@@ -35,11 +35,11 @@ endmacro()
 
 # For Application management
 aux_source_directory(applications APP_SRCS)
-# aux_source_directory(applications/network APP_SRCS)
+aux_source_directory(applications/network APP_SRCS)
 aux_source_directory(applications/doip APP_SRCS)
 INCLUDE_DIRECTORIES(
     applications
-    # applications/network
+    applications/network
 	applications/doip
 )
 

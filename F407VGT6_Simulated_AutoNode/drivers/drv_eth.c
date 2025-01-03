@@ -80,13 +80,10 @@ static void dump_hex(const rt_uint8_t *ptr, rt_size_t buflen)
 }
 #endif
 
-extern void phy_reset(void);
 /* EMAC initialization function */
 static rt_err_t rt_stm32_eth_init(rt_device_t dev)
 {
     __HAL_RCC_ETH_CLK_ENABLE();
-
-    //phy_reset();
 
     /* ETHERNET Configuration */
     EthHandle.Instance = ETH;
