@@ -43,6 +43,20 @@ INCLUDE_DIRECTORIES(
 	applications/doip
 )
 
+#FAL
+SET(RT_FAL_SOURCES
+	rt-thread/components/fal/src/fal_flash.c
+	rt-thread/components/fal/src/fal_partition.c
+	rt-thread/components/fal/src/fal_rtt.c
+	rt-thread/components/fal/samples/porting/fal_flash_sfud_port.c
+	rt-thread/components/fal/src/fal.c
+)
+INCLUDE_DIRECTORIES(
+	rt-thread/components/fal/inc
+	rt-thread/components/fal/samples/porting
+)
+
+
 INCLUDE_DIRECTORIES(
 	.
 	applications
@@ -87,6 +101,7 @@ INCLUDE_DIRECTORIES(
 	rt-thread/include
 	rt-thread/libcpu/aem/common
 	rt-thread/libcpu/aem/cortex-m4
+
 )
 
 ADD_DEFINITIONS(
@@ -206,6 +221,7 @@ rt-thread/components/net/lwip/lwip-2.1.2/src/api/tcpip.c
 	rt-thread/components/drivers/ipc/waitqueue.c
 	rt-thread/components/drivers/ipc/workqueue.c
 	rt-thread/components/drivers/can/can.c
+	rt-thread/components/drivers/mtd/mtd_nor.c
 	rt-thread/components/dfs/src/dfs.c
 	rt-thread/components/dfs/src/dfs_file.c
 	rt-thread/components/dfs/src/dfs_fs.c
@@ -367,7 +383,9 @@ LINK_LIBRARIES(
 ADD_EXECUTABLE(${CMAKE_PROJECT_NAME}.elf 
 	${APP_SRCS} 
 	${PROJECT_SOURCES} 
+	${RT_FAL_SOURCES}
 )
+
 
 target_link_libraries(${CMAKE_PROJECT_NAME}.elf 
 	CmBackTraceLib

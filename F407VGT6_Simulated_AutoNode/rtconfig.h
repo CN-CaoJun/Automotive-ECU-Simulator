@@ -101,6 +101,12 @@
 #define RT_DFS_ELM_MUTEX_TIMEOUT 3000
 /* end of elm-chan's FatFs, Generic FAT Filesystem Module */
 #define RT_USING_DFS_DEVFS
+#define RT_USING_FAL
+#define FAL_DEBUG_CONFIG
+#define FAL_DEBUG 1
+#define FAL_PART_HAS_TABLE_CFG
+#define FAL_USING_SFUD_PORT
+#define FAL_USING_NOR_FLASH_DEV_NAME "norflash0"
 
 /* Device Drivers */
 
@@ -116,6 +122,7 @@
 #define RT_CAN_USING_HDR
 #define RT_USING_PHY
 #define RT_USING_PIN
+#define RT_USING_MTD_NOR
 #define RT_USING_RTC
 #define RT_USING_SOFT_RTC
 #define RT_USING_SDIO

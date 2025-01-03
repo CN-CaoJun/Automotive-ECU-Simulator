@@ -36,6 +36,3 @@ int mnt_init(void)
 }
 INIT_ENV_EXPORT(mnt_init);
 #endif
-
-
-
