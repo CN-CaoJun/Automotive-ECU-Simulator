@@ -6,7 +6,7 @@ echo ==============================
 echo Starting OpenOCD server
 echo ==============================
 
-%OPENOCD_PATH%\bin\openocd.exe -f interface\cmsis-dap.cfg -f target\stm32f4x.cfg -c "program %FIRMWARE_ELF% verify reset exit"
+openocd -f interface\cmsis-dap.cfg -f target\stm32f4x.cfg -c "program %FIRMWARE_ELF% verify reset exit"
 
 timeout /t 1
 
