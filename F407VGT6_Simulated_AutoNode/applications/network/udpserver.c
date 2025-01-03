@@ -116,6 +116,9 @@ static void udpserv(void *paramemter)
             /* Output received message */
             /* 输出接收的数据 */
             LOG_D("Received data = %s", recv_data);
+
+            sendto(sock, (const char *)recv_data, strlen(recv_data), 0, (struct sockaddr *)&client_addr, addr_len);
+
             /* If the message received is 'exit', quit. */
             /* 如果接收数据是exit，退出 */
             if (strcmp(recv_data, "exit") == 0)
@@ -123,6 +126,8 @@ static void udpserv(void *paramemter)
                 goto __exit;
             }
         }
+
+
     }
 
 __exit:
