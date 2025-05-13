@@ -5,7 +5,7 @@ SET(CMAKE_SYSTEM_PROCESSOR cortex-m4)
 # SET(CMAKE_VERBOSE_MAKEFILE ON)
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-SET(BAREMETAL_ARM_TOOLCHAIN_PATH   "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw/bin")
+SET(BAREMETAL_ARM_TOOLCHAIN_PATH   "${CMAKE_SOURCE_DIR}/../_tools/gcc-arm-none-eabi-10.3-2021.10/bin")
 SET(CMAKE_C_COMPILER "${BAREMETAL_ARM_TOOLCHAIN_PATH}/arm-none-eabi-gcc.exe")
 SET(CMAKE_ASM_COMPILER "${BAREMETAL_ARM_TOOLCHAIN_PATH}/arm-none-eabi-gcc.exe")
 SET(CMAKE_C_FLAGS " -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc -O0 -gdwarf-2 -g")
