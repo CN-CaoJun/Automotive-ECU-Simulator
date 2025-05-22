@@ -79,7 +79,7 @@ void tick_init() {
         rt_thread_startup(tid);
     }
 }
-// Register tick_init as a shell command
+// Register tick_init as a shell command test
 MSH_CMD_EXPORT(tick_init, "Run tick counter example with ULOG output")
 
 
