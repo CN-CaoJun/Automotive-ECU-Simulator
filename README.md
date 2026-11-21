@@ -6,7 +6,7 @@ The project framework involves a Gateway Simulator acting as the central node, i
 
 ![image-20241126092035498](./${pics}/image-20241126092035498.png)
 
-#### Hardware-Type1: STM32H750VBT6
+#### Hardware: STM32H750VBT6
 
 **Support CANFD**
 
@@ -14,12 +14,6 @@ The STM32H750VBt6 microcontroller is chosen for its high performance, multiple c
 - **High Performance**: Suitable for demanding applications requiring fast processing speeds.
 - **Multiple Communication Interfaces**: Supports various communication protocols essential for automotive applications, including CAN and Ethernet.
 - **Complex Application Support**: Capable of handling sophisticated tasks like those found in automotive body networks.
-
-#### Hardware-Type2: STM32F407VGT6
-
-**Only Normal CAN**
-
-The STM32F407VGT6 is a microcontroller based on the high-performance Arm Cortex-M4 32-bit RISC core
 
 #### Software: RT-Thread
 
