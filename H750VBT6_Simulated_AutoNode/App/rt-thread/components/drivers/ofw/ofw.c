@@ -13,6 +13,7 @@
 #include <drivers/platform.h>
 #include <drivers/core/bus.h>
 #include <drivers/serial_dm.h>
+#include <drivers/misc.h>
 
 #define DBG_TAG "rtdm.ofw"
 #define DBG_LVL DBG_INFO
@@ -26,6 +27,7 @@ struct rt_ofw_stub *rt_ofw_stub_probe_range(struct rt_ofw_node *np,
     const struct rt_ofw_stub *stub = RT_NULL;
 
     if (np && stub_start && stub_end &&
+        rt_ofw_node_is_available(np) &&
         !rt_ofw_node_test_flag(np, RT_OFW_F_READLY) &&
         !rt_ofw_node_test_flag(np, RT_OFW_F_SYSTEM))
     {
@@ -58,6 +60,99 @@ struct rt_ofw_stub *rt_ofw_stub_probe_range(struct rt_ofw_node *np,
     }
 
     return (struct rt_ofw_stub *)stub;
+}
+
+struct ofw_obj_cmp_list
+{
+    const char *cells_name;
+    const char *obj_name;
+    rt_size_t obj_size;
+};
+
+static const struct ofw_obj_cmp_list ofw_obj_cmp_list[] =
+{
+#ifdef RT_USING_CLK
+    { "#clock-cells", RT_CLK_NODE_OBJ_NAME, sizeof(struct rt_clk_node) },
+#endif
+#ifdef RT_USING_RESET
+    { "#reset-cells", RT_RESET_CONTROLLER_OBJ_NAME, sizeof(struct rt_reset_controller) },
+#endif
+    { "#power-domain-cells", RT_POWER_DOMAIN_PROXY_OBJ_NAME, sizeof(struct rt_dm_power_domain_proxy) },
+    { "#power-domain-cells", RT_POWER_DOMAIN_OBJ_NAME, sizeof(struct rt_dm_power_domain) },
+};
+
+static struct rt_object *ofw_parse_object(struct rt_ofw_node *np, const char *cells_name)
+{
+    const struct ofw_obj_cmp_list *item;
+    struct rt_object *obj = rt_ofw_data(np), *ret_obj = RT_NULL;
+    RT_BITMAP_DECLARE(idx_mask, RT_ARRAY_SIZE(ofw_obj_cmp_list)) = {};
+
+    for (int i = 0; i < RT_ARRAY_SIZE(ofw_obj_cmp_list); ++i)
+    {
+        item = &ofw_obj_cmp_list[i];
+
+        if (!rt_ofw_prop_read_bool(np, item->cells_name))
+        {
+            rt_bitmap_set_bit(idx_mask, i);
+        }
+    }
+
+    while (!ret_obj)
+    {
+        int i = 0;
+
+        /* Is print ? */
+        if (!((rt_uint32_t)(obj->name[0] - 0x20) < 0x5f))
+        {
+            break;
+        }
+
+        rt_bitmap_for_each_clear_bit(idx_mask, i, RT_ARRAY_SIZE(ofw_obj_cmp_list))
+        {
+            item = &ofw_obj_cmp_list[i];
+
+            if (!rt_strncmp(item->obj_name, obj->name, RT_NAME_MAX))
+            {
+                if (!rt_strcmp(item->cells_name, cells_name))
+                {
+                    ret_obj = obj;
+                    break;
+                }
+
+                obj = (struct rt_object *)((rt_ubase_t)obj + item->obj_size);
+                break;
+            }
+        }
+
+        if (i >= RT_ARRAY_SIZE(ofw_obj_cmp_list))
+        {
+            LOG_E("Invalid rt_object = %s", obj->name);
+
+            break;
+        }
+    }
+
+    return ret_obj;
+}
+
+struct rt_object *rt_ofw_parse_object(struct rt_ofw_node *np, const char *obj_name, const char *cells_name)
+{
+    struct rt_object *obj = RT_NULL, *test_obj;
+
+    if (np && (test_obj = rt_ofw_data(np)) && cells_name)
+    {
+        /* The composite object is rare, so we try to find this object as much as possible at once. */
+        if (obj_name && !rt_strcmp(test_obj->name, obj_name))
+        {
+            obj = test_obj;
+        }
+        else
+        {
+            obj = ofw_parse_object(np, cells_name);
+        }
+    }
+
+    return obj;
 }
 
 static const char *ofw_console_serial_find(char *dst_con, struct rt_ofw_node *np)
@@ -213,7 +308,26 @@ rt_err_t rt_ofw_console_setup(void)
 
     if (err == -RT_ENOSYS && !rt_ofw_prop_read_string(ofw_node_chosen, "stdout-path", &stdout_path))
     {
-        struct rt_ofw_node *stdout_np = rt_ofw_find_node_by_path(stdout_path);
+        struct rt_ofw_node *stdout_np;
+
+        if (*stdout_path != '/' && ofw_node_aliases)
+        {
+            int alias_len;
+            struct rt_ofw_prop *prop;
+
+            alias_len = strchrnul(stdout_path, ':') - stdout_path;
+
+            rt_ofw_foreach_prop(ofw_node_aliases, prop)
+            {
+                if (!rt_strncmp(prop->name, stdout_path, alias_len))
+                {
+                    stdout_path = prop->value;
+                    break;
+                }
+            }
+        }
+
+        stdout_np = rt_ofw_find_node_by_path(stdout_path);
 
         if (stdout_np && (ofw_name = ofw_console_serial_find(con_name, stdout_np)))
         {
@@ -298,6 +412,11 @@ const char *rt_ofw_bootargs_select(const char *key, int index)
                 while (*ch == ' ' && ch < bootargs_end)
                 {
                     *(char *)ch++ = '\0';
+                }
+                if (*ch == '\0')
+                {
+                    /* space in the end */
+                    --bootargs_nr;
                 }
                 --ch;
             }
@@ -549,13 +668,23 @@ void rt_ofw_node_dump_dts(struct rt_ofw_node *np, rt_bool_t sibling_too)
             struct fdt_info *header = (struct fdt_info *)np->name;
             struct fdt_reserve_entry *rsvmap = header->rsvmap;
 
-            rt_kprintf("/dts-v%x/;\n\n", fdt_version(header->fdt));
+            /*
+             * Shall be present to identify the file as a version 1 DTS
+             * (dts files without this tag will be treated by dtc
+             * as being in the obsolete version 0, which uses
+             * a different format for integers in addition to
+             * other small but incompatible changes).
+             */
+            rt_kprintf("/dts-v1/;\n\n");
 
             for (int i = header->rsvmap_nr - 1; i >= 0; --i)
             {
-                rt_kprintf("/memreserve/\t%p %p;\n",
-                        ofw_static_cast(rt_size_t, fdt64_to_cpu(rsvmap->address)),
-                        ofw_static_cast(rt_size_t, fdt64_to_cpu(rsvmap->size)));
+                rt_uint64_t address = fdt64_to_cpu(rsvmap->address);
+                rt_uint64_t size = fdt64_to_cpu(rsvmap->size);
+
+                rt_kprintf("/memreserve/\t0x%08x%08x 0x%08x%08x;\n",
+                        rt_upper_32_bits(address), rt_lower_32_bits(address),
+                        rt_upper_32_bits(size), rt_lower_32_bits(size));
 
                 ++rsvmap;
             }

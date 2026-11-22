@@ -10,6 +10,10 @@
 
 #include <rtthread.h>
 
+#define DBG_TAG "rtdm"
+#define DBG_LVL DBG_INFO
+#include <rtdbg.h>
+
 #ifdef RT_USING_OFW
 #include <drivers/ofw_io.h>
 #include <drivers/ofw_irq.h>
@@ -53,6 +57,137 @@ void rt_dm_secondary_cpu_init(void)
 }
 #endif /* RT_USING_SMP */
 
+/**
+ * @brief This function will alloc an id in an IDA object
+ *
+ * @param ida is the IDA object
+ *
+ * @return the id or -RT_EEMPTY
+ */
+int rt_dm_ida_alloc(struct rt_dm_ida *ida)
+{
+    int id;
+    RT_ASSERT(ida != RT_NULL);
+
+    rt_spin_lock(&ida->lock);
+
+    id = rt_bitmap_next_clear_bit(ida->map, 0, RT_DM_IDA_NUM);
+
+    if (id != RT_DM_IDA_NUM)
+    {
+        rt_bitmap_set_bit(ida->map, id);
+    }
+
+    rt_spin_unlock(&ida->lock);
+
+    if (id != RT_DM_IDA_NUM)
+    {
+        return id;
+    }
+
+    return -RT_EEMPTY;
+}
+
+/**
+ * @brief This function will take (force) an id in an IDA object
+ *
+ * @param ida is the IDA object
+ *
+ * @param id is the id that want to take
+ *
+ * @return the result of taking
+ */
+rt_bool_t rt_dm_ida_take(struct rt_dm_ida *ida, int id)
+{
+    RT_ASSERT(ida != RT_NULL);
+    RT_ASSERT(id >= 0);
+
+    rt_spin_lock(&ida->lock);
+
+    if (!rt_bitmap_test_bit(ida->map, id))
+    {
+        rt_bitmap_set_bit(ida->map, id);
+    }
+    else
+    {
+        id = RT_DM_IDA_NUM;
+    }
+
+    rt_spin_unlock(&ida->lock);
+
+    return id != RT_DM_IDA_NUM;
+}
+
+/**
+ * @brief This function will release an id in an IDA object
+ *
+ * @param ida is the IDA object
+ *
+ * @param id is the id of IDA object
+ */
+void rt_dm_ida_free(struct rt_dm_ida *ida, int id)
+{
+    RT_ASSERT(ida != RT_NULL);
+    RT_ASSERT(id >= 0);
+
+    rt_spin_lock(&ida->lock);
+
+    rt_bitmap_clear_bit(ida->map, id);
+
+    rt_spin_unlock(&ida->lock);
+}
+
+/**
+ * @brief This function will return the specified master id and device id of device.
+ *
+ * @param master_id is the master id (0, 255] of device
+ *
+ * @param device_id is the device id [-1, 255] of device, when device_id is -1,
+ *        the function will end when find the first device.
+ *
+ * @return the device object or RT_NULL
+ */
+rt_device_t rt_dm_device_find(int master_id, int device_id)
+{
+    struct rt_device *dev, *ret_dev = RT_NULL;
+    struct rt_object_information *information = RT_NULL;
+
+    if (master_id <= 0 || device_id > 255)
+    {
+        return RT_NULL;
+    }
+
+    information = rt_object_get_information(RT_Object_Class_Device);
+
+    /* parameter check */
+    if (!information)
+    {
+        return RT_NULL;
+    }
+
+    /* which is invoke in interrupt status */
+    RT_DEBUG_NOT_IN_INTERRUPT;
+
+    /* enter critical */
+    rt_enter_critical();
+
+    /* try to find object */
+    rt_list_for_each_entry(dev, &information->object_list, parent.list)
+    {
+        if (master_id == dev->master_id &&
+            (device_id == -1 || device_id == dev->device_id))
+        {
+            ret_dev = dev;
+            break;
+        }
+    }
+
+    /* leave critical */
+    rt_exit_critical();
+
+    return ret_dev;
+}
+
 struct prefix_track
 {
     rt_list_t list;
@@ -60,7 +195,7 @@ struct prefix_track
     int uid;
     const char *prefix;
 };
-static struct rt_spinlock _prefix_nodes_lock = { 0 };
+static RT_DEFINE_SPINLOCK(_prefix_nodes_lock);
 static rt_list_t _prefix_nodes = RT_LIST_OBJECT_INIT(_prefix_nodes);
 
 int rt_dm_dev_set_name_auto(rt_device_t dev, const char *prefix)
@@ -170,6 +305,23 @@ const char *rt_dm_dev_get_name(rt_device_t dev)
 #define ofw_api_call(name, ...)   (-RT_ENOSYS)
 #define ofw_api_call_ptr(name, ...) RT_NULL
 #endif
+
+rt_bool_t rt_dm_dev_is_big_endian(rt_device_t dev)
+{
+    if (rt_dm_dev_prop_read_bool(dev, "big-endian"))
+    {
+        return RT_TRUE;
+    }
+
+#ifdef ARCH_CPU_BIG_ENDIAN
+    if (rt_dm_dev_prop_read_bool(dev, "native-endian"))
+    {
+        return RT_TRUE;
+    }
+#endif /* ARCH_CPU_BIG_ENDIAN */
+
+    return RT_FALSE;
+}
 
 int rt_dm_dev_get_address_count(rt_device_t dev)
 {
@@ -314,7 +466,7 @@ void rt_dm_dev_bind_fwdata(rt_device_t dev, void *fw_np, void *data)
 
     if (dev->ofw_node == RT_NULL)
     {
-        rt_kprintf("[%s:%s] line=%d ofw_node is NULL\r\n", __FILE__, __func__, __LINE__);
+        LOG_D("[%s:%s] line=%d ofw_node is NULL", __FILE__, __func__, __LINE__);
         return;
     }
 
@@ -337,7 +489,7 @@ void rt_dm_dev_unbind_fwdata(rt_device_t dev, void *fw_np)
 
     if (dev_fw_np == RT_NULL)
     {
-        rt_kprintf("[%s:%s] line=%d dev_fw_np is NULL\r\n", __FILE__, __func__, __LINE__);
+        LOG_D("[%s:%s] line=%d dev_fw_np is NULL", __FILE__, __func__, __LINE__);
         return;
     }
 
@@ -345,16 +497,30 @@ void rt_dm_dev_unbind_fwdata(rt_device_t dev, void *fw_np)
 #endif
 }
 
+const char *rt_dm_dev_get_prop_fuzzy_name(rt_device_t dev, const char *name)
+{
+    RT_ASSERT(dev != RT_NULL);
+
+#ifdef RT_USING_OFW
+    if (dev->ofw_node)
+    {
+        return ofw_api_call_ptr(get_prop_fuzzy_name, dev->ofw_node, name);
+    }
+#endif
+
+    return RT_NULL;
+}
+
 int rt_dm_dev_prop_read_u8_array_index(rt_device_t dev, const char *propname,
         int index, int nr, rt_uint8_t *out_values)
 {
     RT_ASSERT(dev != RT_NULL);
 
-#ifdef RT_UISNG_OFW
+#ifdef RT_USING_OFW
     if (dev->ofw_node)
     {
         return ofw_api_call(prop_read_u8_array_index, dev->ofw_node, propname,
-                index, nr, out_value);
+                index, nr, out_values);
     }
 #endif
 
@@ -466,4 +632,3 @@ rt_bool_t rt_dm_dev_prop_read_bool(rt_device_t dev, const char *propname)
 
     return RT_FALSE;
 }
-

@@ -18,7 +18,8 @@ H750VBT6_Simulated_AutoNode/
 - Windows 10/11
 - STM32H750VBT6 + W25Q128
 - DAPLink（CMSIS-DAP）
-- 2026-11-22 实板验证通过
+- RT-Thread 5.4.0（主线 `6fdfe700`）
+- 2026-11-23 实板验证通过
 
 ## 1. 工具链
 
@@ -78,14 +79,14 @@ cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode
 | RT-Thread Boot | `Boot\build\RTThread-Boot.bin` | `0x08000000` |
 | Simulated-GW-ECU | `App\build\Simulated-GW-ECU.bin` | `0x90000000` |
 
-本次验证结果：
+本次验证结果（RT-Thread 5.4.0）：
 
 ```text
-RTThread-Boot.elf  text 13836  data 1124  bss 5404
-Boot image size: 14960 / 131072 bytes
+RTThread-Boot.elf  text 14876  data 1124  bss 5416
+Boot image size: 16000 / 131072 bytes
 
-Simulated-GW-ECU.elf  text 220316  data 3712  bss 24216
-Simulated-GW-ECU.bin  224028 bytes
+Simulated-GW-ECU.elf  text 336344  data 4384  bss 93628
+Simulated-GW-ECU.bin  340728 bytes
 ```
 
 ## 3. 手工编译命令
@@ -209,16 +210,37 @@ COM3  115200  8N1  无流控
 正常启动日志：
 
 ```text
+ \ | /
+- RT -     Thread Operating System
+ / | \     5.4.0 build Nov 22 2026 23:06:00
+ 2006 - 2026 Copyright by RT-Thread team
+
 [Boot] RT-Thread QSPI bootloader
 [Boot] QSPI JEDEC ID: EF4018
 [Boot] QSPI mapped in 4-bit mode.
-[Boot] Application vector: SP=0x24001280 entry=0x90027D2D
+[Boot] Application vector: SP=0x24001520 entry=0x90041F59
 [Boot] Jumping to application at 0x90000000
 initialize rti_board_start:0 done
 initialize rt_hw_can_init:0 done
 isotp main: find fdcan1 success!
 isotp main: create cantp_rx thread success!
 ```
+
+2026-11-23 的 Release 复验中，App 静态占用为：
+
+```text
+text 336344  data 4384  bss 93628
+bin 340728 bytes
+```
+
+TF 卡已接入 SDMMC1 并能在运行日志中完成 `mmcsd_detect`；CAN 引脚
+保持在 AF9（`GPIOB_AFRH=0x00bbb099`）。SPI1 已识别 W25Q64
+（`EF 40 17`），PB0/PE13 LED 默认熄灭。ETH 驱动、DP83848C PHY
+和 lwIP 初始化正常，但只有板卡 ETH 网口物理连接到主机或交换机后
+才会出现 link up。DoIP 的 UDP/TCP 13400 服务已随 App 启动，
+端到端测试脚本见 `Docs/DOIP.md`。
+
+升级与迁移细节见 `Docs/RTTHREAD_UPGRADE.md`。
 
 也可以通过 SWD 检查运行时状态：
 

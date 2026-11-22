@@ -116,7 +116,9 @@ rt_err_t rt_device_pwm_register(struct rt_device_pwm *device, const char *name, 
 {
     rt_err_t result = RT_EOK;
 
+#ifndef RT_USING_DM
     rt_memset(device, 0, sizeof(struct rt_device_pwm));
+#endif
 
 #ifdef RT_USING_DEVICE_OPS
     device->parent.ops = &pwm_device_ops;
@@ -283,7 +285,7 @@ rt_err_t rt_pwm_set_phase(struct rt_device_pwm *device, int channel, rt_uint32_t
     return result;
 }
 
-static rt_err_t rt_pwm_get(struct rt_device_pwm *device, struct rt_pwm_configuration *cfg)
+rt_err_t rt_pwm_get(struct rt_device_pwm *device, struct rt_pwm_configuration *cfg)
 {
     rt_err_t result = RT_EOK;
 
@@ -331,10 +333,12 @@ static int pwm_list(int argc, char **argv)
                 pwm_device = (struct rt_device_pwm *)rt_device_find(argv[2]);
                 result_str = (pwm_device == RT_NULL) ? "failure" : "success";
                 rt_kprintf("probe %s %s\n", argv[2], result_str);
+                return (pwm_device == RT_NULL) ? -RT_ERROR : RT_EOK;
             }
             else
             {
                 rt_kprintf("pwm probe <device name>                  - probe pwm by name\n");
+                return -RT_EINVAL;
             }
         }
         else if (pwm_device == RT_NULL)

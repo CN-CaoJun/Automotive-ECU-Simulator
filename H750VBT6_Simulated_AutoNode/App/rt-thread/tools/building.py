@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # File      : building.py
 # This file is part of RT-Thread RTOS
@@ -22,7 +23,10 @@
 # 2015-01-20     Bernard      Add copyright information
 # 2015-07-25     Bernard      Add LOCAL_CCFLAGS/LOCAL_CPPPATH/LOCAL_CPPDEFINES for
 #                             group definition.
-#
+# 2024-04-21     Bernard      Add toolchain detection in sdk packages
+# 2025-01-05     Bernard      Add logging as Env['log']
+# 2025-03-02     ZhaoCake     Add MkDist_Strip
+# 2025-01-05     Assistant    Refactor SCons PreProcessor patch to independent class
 
 import os
 import sys
@@ -31,95 +35,134 @@ import utils
 import operator
 import rtconfig
 import platform
-
+import logging
 from SCons.Script import *
 from utils import _make_path_relative
 from mkdist import do_copy_file
 from options import AddOptions
-
+from preprocessor import create_preprocessor_instance
+from win32spawn import Win32Spawn
 
 BuildOptions = {}
 Projects = []
 Rtt_Root = ''
 Env = None
 
-# SCons PreProcessor patch
-def start_handling_includes(self, t=None):
-    """
-    Causes the PreProcessor object to start processing #import,
-    #include and #include_next lines.
+if not hasattr(rtconfig, 'CXXFLAGS') and hasattr(rtconfig, 'CFLAGS'):
+    rtconfig.CXXFLAGS = rtconfig.CFLAGS
 
-    This method will be called when a #if, #ifdef, #ifndef or #elif
-    evaluates True, or when we reach the #else in a #if, #ifdef,
-    #ifndef or #elif block where a condition already evaluated
-    False.
+def _path_variants(path):
+    variants = set()
+    if not path:
+        return variants
 
-    """
-    d = self.dispatch_table
-    p = self.stack[-1] if self.stack else self.default_table
+    normalized = path.replace('\\', '/').rstrip('/')
+    variants.add(normalized)
+    variants.add(normalized + '/')
+    variants.add(normalized.replace('/', '\\'))
+    variants.add((normalized + '/').replace('/', '\\'))
 
-    for k in ('import', 'include', 'include_next', 'define'):
-        d[k] = p[k]
+    return variants
 
-def stop_handling_includes(self, t=None):
-    """
-    Causes the PreProcessor object to stop processing #import,
-    #include and #include_next lines.
+def _split_exec_path(exec_path):
+    normalized = exec_path.replace('\\', '/').rstrip('/')
+    lower = normalized.lower()
+    for suffix in ('/arm/armclang/bin', '/arm/armcc/bin', '/arm/bin40', '/arm/bin', '/bin'):
+        if lower.endswith(suffix):
+            return normalized[:-len(suffix)], normalized[-len(suffix):]
 
-    This method will be called when a #if, #ifdef, #ifndef or #elif
-    evaluates False, or when we reach the #else in a #if, #ifdef,
-    #ifndef or #elif block where a condition already evaluated True.
-    """
-    d = self.dispatch_table
-    d['import'] = self.do_nothing
-    d['include'] =  self.do_nothing
-    d['include_next'] =  self.do_nothing
-    d['define'] =  self.do_nothing
+    return normalized, ''
 
-PatchedPreProcessor = SCons.cpp.PreProcessor
-PatchedPreProcessor.start_handling_includes = start_handling_includes
-PatchedPreProcessor.stop_handling_includes = stop_handling_includes
+def _replace_exec_path(value, old_path, new_path):
+    if not isinstance(value, str):
+        return value
 
-class Win32Spawn:
-    def spawn(self, sh, escape, cmd, args, env):
-        # deal with the cmd build-in commands which cannot be used in
-        # subprocess.Popen
-        if cmd == 'del':
-            for f in args[1:]:
-                try:
-                    os.remove(f)
-                except Exception as e:
-                    print('Error removing file: ' + e)
-                    return -1
-            return 0
+    result = value
+    normalized_new_path = new_path.replace('\\', '/').rstrip('/')
+    for old in sorted(_path_variants(old_path), key=len, reverse=True):
+        replacement = normalized_new_path.replace('/', '\\') if '\\' in old else normalized_new_path
+        if old.endswith(('/', '\\')):
+            replacement += old[-1]
+        result = result.replace(old, replacement)
 
-        import subprocess
+    return result
 
-        newargs = ' '.join(args[1:])
-        cmdline = cmd + " " + newargs
+def _apply_exec_path_override(env, exec_path):
+    old_exec_path = getattr(rtconfig, 'EXEC_PATH', '')
+    old_root, suffix = _split_exec_path(old_exec_path)
+    new_root, new_suffix = _split_exec_path(exec_path)
+    new_exec_path = new_root + (new_suffix or suffix)
 
-        # Make sure the env is constructed by strings
-        _e = dict([(k, str(v)) for k, v in env.items()])
+    if old_root:
+        for name in ('CFLAGS', 'CXXFLAGS', 'AFLAGS', 'LFLAGS',
+                     'M_CFLAGS', 'M_CXXFLAGS', 'M_LFLAGS'):
+            if hasattr(rtconfig, name):
+                setattr(rtconfig, name, _replace_exec_path(getattr(rtconfig, name), old_root, new_root))
 
-        # Windows(tm) CreateProcess does not use the env passed to it to find
-        # the executables. So we have to modify our own PATH to make Popen
-        # work.
-        old_path = os.environ['PATH']
-        os.environ['PATH'] = _e['PATH']
+    rtconfig.EXEC_PATH = new_exec_path
+    for key, name in (('CC', 'CC'), ('CXX', 'CXX'), ('AS', 'AS'), ('AR', 'AR'),
+                      ('LINK', 'LINK'), ('CFLAGS', 'CFLAGS'),
+                      ('CXXFLAGS', 'CXXFLAGS'), ('ASFLAGS', 'AFLAGS'),
+                      ('LINKFLAGS', 'LFLAGS')):
+        if hasattr(rtconfig, name):
+            env[key] = getattr(rtconfig, name)
 
+def _normalize_armclang_flags_for_host(env):
+    if rtconfig.PLATFORM == 'armclang' and env['PLATFORM'] != 'win32':
+        for name in ('LFLAGS', 'M_LFLAGS'):
+            if hasattr(rtconfig, name):
+                setattr(rtconfig, name, getattr(rtconfig, name).replace('\\', '/'))
+
+        if hasattr(rtconfig, 'LFLAGS'):
+            env['LINKFLAGS'] = rtconfig.LFLAGS
+
+def _as_unicode(value):
+    try:
+        unicode
+    except NameError:
+        return value if isinstance(value, str) else str(value)
+
+    if isinstance(value, unicode):
+        return value
+
+    for encoding in (sys.getfilesystemencoding(), 'utf-8'):
+        if not encoding:
+            continue
         try:
-            proc = subprocess.Popen(cmdline, env=_e, shell=False)
-        except Exception as e:
-            print('Error in calling command:' + cmdline.split(' ')[0])
-            print('Exception: ' + os.strerror(e.errno))
-            if (os.strerror(e.errno) == "No such file or directory"):
-                print ("\nPlease check Toolchains PATH setting.\n")
+            return value.decode(encoding)
+        except (AttributeError, UnicodeDecodeError):
+            pass
 
-            return e.errno
-        finally:
-            os.environ['PATH'] = old_path
+    return unicode(value)
 
-        return proc.wait()
+def _check_invalid_option_dashes():
+    # Reject command line options typed with Unicode dash lookalikes.
+    invalid_dashes = (
+        u'\u2010', u'\u2011', u'\u2012', u'\u2013', u'\u2014',
+        u'\u2015', u'\u2212', u'\ufe58', u'\ufe63', u'\uff0d',
+    )
+
+    entries = []
+    entries.extend((key, value) for key, value in ARGUMENTS.items())
+    entries.extend((target, None) for target in COMMAND_LINE_TARGETS)
+
+    for key, value in entries:
+        option = _as_unicode(key)
+        normalized = option
+        for dash in invalid_dashes:
+            normalized = normalized.replace(dash, u'-')
+
+        if option != normalized and normalized.startswith(u'-'):
+            if value is not None:
+                display = u'%s=%s' % (option, _as_unicode(value))
+                hint = u'%s=%s' % (normalized, _as_unicode(value))
+            else:
+                display = option
+                hint = normalized
+
+            print("Invalid command line option: %s" % display)
+            print("Please use ASCII '-' instead: %s" % hint)
+            sys.exit(1)
 
 def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = []):
 
@@ -129,8 +172,19 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
     global Rtt_Root
 
     AddOptions()
+    _check_invalid_option_dashes()
 
     Env = env
+    # export the default environment
+    Export('env')
+
+    # prepare logging and set log
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logger = logging.getLogger('rt-scons')
+    if GetOption('verbose'):
+        logger.setLevel(logging.DEBUG)
+    Env['log'] = logger
+
     Rtt_Root = os.path.abspath(root_directory)
 
     # make an absolute root directory
@@ -139,10 +193,12 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
 
     # set RTT_ROOT in ENV
     Env['RTT_ROOT'] = Rtt_Root
+    os.environ["RTT_DIR"] = Rtt_Root
     # set BSP_ROOT in ENV
     Env['BSP_ROOT'] = Dir('#').abspath
+    os.environ["BSP_DIR"] = Dir('#').abspath
 
-    sys.path = sys.path + [os.path.join(Rtt_Root, 'tools')]
+    sys.path += os.path.join(Rtt_Root, 'tools')
 
     # {target_name:(CROSS_TOOL, PLATFORM)}
     tgt_dict = {'mdk':('keil', 'armcc'),
@@ -152,6 +208,7 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
                 'vs':('msvc', 'cl'),
                 'vs2012':('msvc', 'cl'),
                 'vsc' : ('gcc', 'gcc'),
+                'vsc_workspace':('gcc', 'gcc'),
                 'cb':('keil', 'armcc'),
                 'ua':('gcc', 'gcc'),
                 'cdk':('gcc', 'gcc'),
@@ -162,7 +219,8 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
                 'cmake-armclang':('keil', 'armclang'),
                 'xmake':('gcc', 'gcc'),
                 'codelite' : ('gcc', 'gcc'),
-                'esp-idf': ('gcc', 'gcc')}
+                'esp-idf': ('gcc', 'gcc'),
+                'zig':('gcc', 'gcc')}
     tgt_name = GetOption('target')
 
     if tgt_name:
@@ -186,16 +244,41 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
         os.environ['RTT_CC_PREFIX'] = exec_prefix
 
     # auto change the 'RTT_EXEC_PATH' when 'rtconfig.EXEC_PATH' get failed
-    if not os.path.exists(rtconfig.EXEC_PATH):
+    if not utils.CmdExists(os.path.join(rtconfig.EXEC_PATH, rtconfig.CC)):
+        Env['log'].debug('To detect CC because CC path in rtconfig.py is invalid:')
+        Env['log'].debug('  rtconfig.py cc ->' + os.path.join(rtconfig.EXEC_PATH, rtconfig.CC))
         if 'RTT_EXEC_PATH' in os.environ:
             # del the 'RTT_EXEC_PATH' and using the 'EXEC_PATH' setting on rtconfig.py
             del os.environ['RTT_EXEC_PATH']
+
+        try:
+            # try to detect toolchains in env
+            envm = utils.ImportModule('env_utility')
+            # from env import GetSDKPath
+            exec_path = envm.GetSDKPath(rtconfig.CC)
+            if exec_path != None:
+                if 'gcc' in rtconfig.CC:
+                    exec_path = os.path.join(exec_path, 'bin')
+
+                if os.path.exists(exec_path):
+                    Env['log'].debug('set CC to ' + exec_path)
+                    rtconfig.EXEC_PATH = exec_path
+                    os.environ['RTT_EXEC_PATH'] = exec_path
+                else:
+                    Env['log'].debug('No Toolchain found in path(%s).' % exec_path)
+        except Exception as e:
+            # detect failed, ignore
+            Env['log'].debug(e)
+            pass
 
     exec_path = GetOption('exec-path')
     if exec_path:
         os.environ['RTT_EXEC_PATH'] = exec_path
 
     utils.ReloadModule(rtconfig) # update environment variables to rtconfig.py
+    if exec_path:
+        _apply_exec_path_override(env, exec_path)
+    _normalize_armclang_flags_for_host(env)
 
     # some env variables have loaded in Environment() of SConstruct before re-load rtconfig.py;
     # after update rtconfig.py's variables, those env variables need to synchronize
@@ -207,8 +290,6 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
         env['LINK'] = rtconfig.LINK
     if exec_path:
         env.PrependENVPath('PATH', rtconfig.EXEC_PATH)
-    env['ASCOM']= env['ASPPCOM']
-
     if GetOption('strict-compiling'):
         STRICT_FLAGS = ''
         if rtconfig.PLATFORM in ['gcc']:
@@ -229,8 +310,16 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
         env['LIBLINKPREFIX'] = ''
         env['LIBLINKSUFFIX'] = '.lib'
         env['LIBDIRPREFIX'] = '--userlibpath '
+        if rtconfig.PLATFORM == 'armclang' and rtconfig.AS == 'armasm':
+            env['ASCOM'] = '$AS $ASFLAGS -o $TARGET $SOURCES'
+            env['ASPPCOM'] = env['ASCOM']
+        else:
+            env['ASCOM'] = env['ASPPCOM']
 
-    elif rtconfig.PLATFORM == 'iccarm':
+    else:
+        env['ASCOM'] = env['ASPPCOM']
+
+    if rtconfig.PLATFORM == 'iccarm':
         env['LIBPREFIX'] = ''
         env['LIBSUFFIX'] = '.a'
         env['LIBLINKPREFIX'] = ''
@@ -259,7 +348,7 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
     Env.Append(BUILDERS = {'BuildLib': bld})
 
     # parse rtconfig.h to get used component
-    PreProcessor = PatchedPreProcessor()
+    PreProcessor = create_preprocessor_instance()
     f = open('rtconfig.h', 'r')
     contents = f.read()
     f.close()
@@ -302,8 +391,13 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
         else:
             print('--global-macros arguments are illegal!')
 
+    if GetOption('attach'):
+        from attachconfig import GenAttachConfigProject
+        GenAttachConfigProject()
+        exit(0)
+
     if GetOption('genconfig'):
-        from genconf import genconfig
+        from env_utility import genconfig
         genconfig()
         exit(0)
 
@@ -311,25 +405,25 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
         from WCS import ThreadStackStaticAnalysis
         ThreadStackStaticAnalysis(Env)
         exit(0)
-    if platform.system() != 'Windows':
-        if GetOption('menuconfig'):
-            from menuconfig import menuconfig
-            menuconfig(Rtt_Root)
-            exit(0)
 
-    if GetOption('pyconfig-silent'):
-        from menuconfig import guiconfig_silent
-        guiconfig_silent(Rtt_Root)
+    if GetOption('menuconfig'):
+        from env_utility import menuconfig
+        menuconfig(Rtt_Root)
         exit(0)
 
-    elif GetOption('pyconfig'):
-        from menuconfig import guiconfig
+    if GetOption('defconfig'):
+        from env_utility import defconfig
+        defconfig(Rtt_Root)
+        exit(0)
+
+    elif GetOption('guiconfig'):
+        from env_utility import guiconfig
         guiconfig(Rtt_Root)
         exit(0)
 
     configfn = GetOption('useconfig')
     if configfn:
-        from menuconfig import mk_rtconfig
+        from env_utility import mk_rtconfig
         mk_rtconfig(configfn)
         exit(0)
 
@@ -350,7 +444,7 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
         if env['LINK'].find('gcc') != -1:
             env['LINK'] = env['LINK'].replace('gcc', 'g++')
 
-    # we need to seperate the variant_dir for BSPs and the kernels. BSPs could
+    # we need to separate the variant_dir for BSPs and the kernels. BSPs could
     # have their own components etc. If they point to the same folder, SCons
     # would find the wrong source code to compile.
     bsp_vdir = 'build'
@@ -369,12 +463,6 @@ def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = [
                            variant_dir=kernel_vdir + '/components',
                            duplicate=0,
                            exports='remove_components'))
-    # include testcases
-    if os.path.isfile(os.path.join(Rtt_Root, 'examples/utest/testcases/SConscript')):
-        objs.extend(SConscript(Rtt_Root + '/examples/utest/testcases/SConscript',
-                           variant_dir=kernel_vdir + '/examples/utest/testcases',
-                           duplicate=0))
-
     return objs
 
 def PrepareModuleBuilding(env, root_directory, bsp_directory):
@@ -393,7 +481,7 @@ def PrepareModuleBuilding(env, root_directory, bsp_directory):
     Rtt_Root = root_directory
 
     # parse bsp rtconfig.h to get used component
-    PreProcessor = PatchedPreProcessor()
+    PreProcessor = create_preprocessor_instance()
     f = open(bsp_directory + '/rtconfig.h', 'r')
     contents = f.read()
     f.close()
@@ -466,7 +554,7 @@ def GetLocalDepend(options, depend):
     # for list type depend
     for item in depend:
         if item != '':
-            if not item in options or options[item] == 0:
+            if not depend in options or item == 0:
                 building = False
 
     return building
@@ -611,8 +699,8 @@ def DefineGroup(name, src, depend, **parameters):
     group['name'] = name
     group['path'] = group_path
     if type(src) == type([]):
-        # remove duplicate elements from list
-        src = list(set(src))
+        # remove duplicate elements from list while preserving order
+        src = list(dict.fromkeys(src))
         group['src'] = File(src)
     else:
         group['src'] = src
@@ -805,6 +893,11 @@ def DoBuilding(target, objects):
 
                 break
     else:
+        # generate build/compile_commands.json
+        if GetOption('cdb') and utils.VerTuple(SCons.__version__) >= (4, 0, 0):
+            Env.Tool("compilation_db")
+            Env.CompilationDatabase('build/compile_commands.json')
+
         # remove source files with local flags setting
         for group in Projects:
             if 'LOCAL_CFLAGS' in group or 'LOCAL_CXXFLAGS' in group or 'LOCAL_CCFLAGS' in group or 'LOCAL_CPPPATH' in group or 'LOCAL_CPPDEFINES' in group:
@@ -819,7 +912,7 @@ def DoBuilding(target, objects):
         for group in Projects:
             local_group(group, objects_in_group)
 
-        # sort seperately, because the data type of
+        # sort separately, because the data type of
         # the members of the two lists are different
         objects_in_group = sorted(objects_in_group)
         objects = sorted(objects)
@@ -832,16 +925,16 @@ def DoBuilding(target, objects):
 def GenTargetProject(program = None):
 
     if GetOption('target') in ['mdk', 'mdk4', 'mdk5']:
-        from keil import MDK2Project, MDK4Project, MDK5Project, ARMCC_Version
+        from targets.keil import MDK2Project, MDK4Project, MDK5Project, ARMCC_Version
 
         if os.path.isfile('template.uvprojx') and GetOption('target') not in ['mdk4']: # Keil5
-            MDK5Project(GetOption('project-name') + '.uvprojx', Projects)
+            MDK5Project(Env, GetOption('project-name') + '.uvprojx', Projects)
             print("Keil5 project is generating...")
         elif os.path.isfile('template.uvproj') and GetOption('target') not in ['mdk5']: # Keil4
-            MDK4Project(GetOption('project-name') + '.uvproj', Projects)
+            MDK4Project(Env, GetOption('project-name') + '.uvproj', Projects)
             print("Keil4 project is generating...")
         elif os.path.isfile('template.Uv2') and GetOption('target') not in ['mdk4', 'mdk5']: # Keil2
-            MDK2Project(GetOption('project-name') + '.Uv2', Projects)
+            MDK2Project(Env, GetOption('project-name') + '.Uv2', Projects)
             print("Keil2 project is generating...")
         else:
             print ('No template project file found.')
@@ -850,68 +943,77 @@ def GenTargetProject(program = None):
         print("Keil-MDK project has generated successfully!")
 
     if GetOption('target') == 'iar':
-        from iar import IARProject, IARVersion
+        from targets.iar import IARProject, IARVersion
         print("IAR Version: " + IARVersion())
-        IARProject(GetOption('project-name') + '.ewp', Projects)
+        IARProject(Env, GetOption('project-name') + '.ewp', Projects)
         print("IAR project has generated successfully!")
 
     if GetOption('target') == 'vs':
-        from vs import VSProject
+        from targets.vs import VSProject
         VSProject(GetOption('project-name') + '.vcproj', Projects, program)
 
     if GetOption('target') == 'vs2012':
-        from vs2012 import VS2012Project
+        from targets.vs2012 import VS2012Project
         VS2012Project(GetOption('project-name') + '.vcxproj', Projects, program)
 
     if GetOption('target') == 'cb':
-        from codeblocks import CBProject
+        from targets.codeblocks import CBProject
         CBProject(GetOption('project-name') + '.cbp', Projects, program)
 
     if GetOption('target') == 'ua':
-        from ua import PrepareUA
+        from targets.ua import PrepareUA
         PrepareUA(Projects, Rtt_Root, str(Dir('#')))
 
     if GetOption('target') == 'vsc':
-        from vsc import GenerateVSCode
+        from targets.vsc import GenerateVSCode
         GenerateVSCode(Env)
         if GetOption('cmsispack'):
             from vscpyocd import GenerateVSCodePyocdConfig
             GenerateVSCodePyocdConfig(GetOption('cmsispack'))
 
+    if GetOption('target') == 'vsc_workspace':
+        from targets.vsc import GenerateVSCodeWorkspace
+        GenerateVSCodeWorkspace(Env)
+
     if GetOption('target') == 'cdk':
-        from cdk import CDKProject
+        from targets.cdk import CDKProject
         CDKProject(GetOption('project-name') + '.cdkproj', Projects)
 
     if GetOption('target') == 'ses':
-        from ses import SESProject
+        from targets.ses import SESProject
         SESProject(Env)
 
     if GetOption('target') == 'makefile':
-        from makefile import TargetMakefile
+        from targets.makefile import TargetMakefile
         TargetMakefile(Env)
 
     if GetOption('target') == 'eclipse':
-        from eclipse import TargetEclipse
-        TargetEclipse(Env, GetOption('reset-project-config'), GetOption('project-name'))
+        from targets.eclipse import TargetEclipse
+        project_name = os.path.basename(Dir('#').abspath)
+        TargetEclipse(Env, GetOption('reset-project-config'), project_name)
 
     if GetOption('target') == 'codelite':
-        from codelite import TargetCodelite
+        from targets.codelite import TargetCodelite
         TargetCodelite(Projects, program)
 
     if GetOption('target') == 'cmake' or GetOption('target') == 'cmake-armclang':
-        from cmake import CMakeProject
-        CMakeProject(Env,Projects)
+        from targets.cmake import CMakeProject
+        CMakeProject(Env, Projects, GetOption('project-name'))
 
     if GetOption('target') == 'xmake':
-        from xmake import XMakeProject
+        from targets.xmake import XMakeProject
         XMakeProject(Env, Projects)
 
     if GetOption('target') == 'esp-idf':
-        from esp_idf import ESPIDFProject
+        from targets.esp_idf import ESPIDFProject
         ESPIDFProject(Env, Projects)
 
+    if GetOption('target') == 'zig':
+        from targets.zigbuild import ZigBuildProject
+        ZigBuildProject(Env, Projects)
+
 def EndBuilding(target, program = None):
-    from mkdist import MkDist
+    from mkdist import MkDist, MkDist_Strip
 
     need_exit = False
 
@@ -939,17 +1041,25 @@ def EndBuilding(target, program = None):
 
     project_name = GetOption('project-name')
     project_path = GetOption('project-path')
-    if GetOption('make-dist') and program != None:
-        MkDist(program, BSP_ROOT, Rtt_Root, Env, project_name, project_path)
-        need_exit = True
-    if GetOption('make-dist-ide') and program != None:
-        import subprocess
-        if not isinstance(project_path, str) or len(project_path) == 0 :
-            project_path = os.path.join(BSP_ROOT, 'rt-studio-project')
-        MkDist(program, BSP_ROOT, Rtt_Root, Env, project_name, project_path)
-        child = subprocess.Popen('scons --target=eclipse --project-name="{}"'.format(project_name), cwd=project_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        stdout, stderr = child.communicate()
-        need_exit = True
+
+    # 合并处理打包相关选项
+    if program != None:
+        if GetOption('make-dist'):
+            MkDist(program, BSP_ROOT, Rtt_Root, Env, project_name, project_path)
+            need_exit = True
+        elif GetOption('dist_strip'):
+            MkDist_Strip(program, BSP_ROOT, Rtt_Root, Env, project_name, project_path)
+            need_exit = True
+        elif GetOption('make-dist-ide'):
+            import subprocess
+            if not isinstance(project_path, str) or len(project_path) == 0:
+                project_path = os.path.join(BSP_ROOT, 'rt-studio-project')
+            MkDist(program, BSP_ROOT, Rtt_Root, Env, project_name, project_path)
+            child = subprocess.Popen('scons --target=eclipse --project-name="{}"'.format(project_name),
+                                   cwd=project_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+            stdout, stderr = child.communicate()
+            need_exit = True
+
     if GetOption('cscope'):
         from cscope import CscopeDatabase
         CscopeDatabase(Projects)
@@ -957,7 +1067,7 @@ def EndBuilding(target, program = None):
     if not GetOption('help') and not GetOption('target'):
         if not os.path.exists(rtconfig.EXEC_PATH):
             print ("Error: the toolchain path (" + rtconfig.EXEC_PATH + ") is not exist, please check 'EXEC_PATH' in path or rtconfig.py.")
-            need_exit = True
+            sys.exit(1)
 
     if need_exit:
         exit(0)
@@ -1012,7 +1122,7 @@ def GetVersion():
     rtdef = os.path.join(Rtt_Root, 'include', 'rtdef.h')
 
     # parse rtdef.h to get RT-Thread version
-    prepcessor = PatchedPreProcessor()
+    prepcessor = create_preprocessor_instance()
     f = open(rtdef, 'r')
     contents = f.read()
     f.close()
@@ -1052,4 +1162,3 @@ def PackageSConscript(package):
     from package import BuildPackage
 
     return BuildPackage(package)
-

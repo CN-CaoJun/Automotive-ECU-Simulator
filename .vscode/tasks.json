@@ -1,0 +1,86 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Boot (Debug)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Scripts/build-debug-target.ps1",
+                "-Target",
+                "Boot"
+            ],
+            "problemMatcher": "$gcc",
+            "group": "build"
+        },
+        {
+            "label": "Build App (Debug)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Scripts/build-debug-target.ps1",
+                "-Target",
+                "App"
+            ],
+            "problemMatcher": "$gcc",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Flash Boot",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Scripts/flash-windows.ps1",
+                "-BootOnly"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Flash App",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Scripts/flash-windows.ps1",
+                "-AppOnly"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Prepare Boot Debug",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Build Boot (Debug)",
+                "Flash Boot"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Prepare App Debug",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Build App (Debug)",
+                "Flash App"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}

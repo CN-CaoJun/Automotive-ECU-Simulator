@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2024 RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -17,7 +17,7 @@
 #include "dfs_private.h"
 
 /**
- * @addtogroup FsApi
+ * @addtogroup group_fs_api
  * @{
  */
 
@@ -183,7 +183,7 @@ int dfs_filesystem_get_partition(struct dfs_partition *part,
     part->offset = *(dpt + 8) | *(dpt + 9) << 8 | *(dpt + 10) << 16 | *(dpt + 11) << 24;
     part->size = *(dpt + 12) | *(dpt + 13) << 8 | *(dpt + 14) << 16 | *(dpt + 15) << 24;
 
-    rt_kprintf("found part[%d], begin: %d, size: ",
+    rt_kprintf("found part[%ld], begin: %ld, size: ",
                pindex, part->offset * 512);
     if ((part->size >> 11) == 0)
         rt_kprintf("%d%s", part->size >> 1, "KB\n"); /* KB */
@@ -322,8 +322,8 @@ int dfs_mount(const char   *device_name,
     /* open device, but do not check the status of device */
     if (dev_id != NULL)
     {
-        if (rt_device_open(fs->dev_id,
-                           RT_DEVICE_OFLAG_RDWR) != RT_EOK)
+        if (rt_device_open(fs->dev_id, RT_DEVICE_OFLAG_RDWR) != RT_EOK &&
+            rt_device_open(fs->dev_id, RT_DEVICE_OFLAG_RDONLY) != RT_EOK)
         {
             /* The underlying device has error, clear the entry. */
             dfs_lock();
@@ -529,7 +529,8 @@ int dfs_mount_device(rt_device_t dev)
 {
   int index = 0;
 
-  if(dev == RT_NULL) {
+  if(dev == RT_NULL)
+  {
     rt_kprintf("the device is NULL to be mounted.\n");
     return -RT_ERROR;
   }
@@ -538,7 +539,8 @@ int dfs_mount_device(rt_device_t dev)
   {
     if (mount_table[index].path == NULL) break;
 
-    if(strcmp(mount_table[index].device_name, dev->parent.name) == 0) {
+    if(strcmp(mount_table[index].device_name, dev->parent.name) == 0)
+    {
       if (dfs_mount(mount_table[index].device_name,
                     mount_table[index].path,
                     mount_table[index].filesystemtype,
@@ -634,7 +636,7 @@ int df(const char *path)
         if (rt_get_errno() == -ENOSYS)
             rt_kprintf("The function is not implemented.\n");
         else
-            rt_kprintf("statfs failed: errno=%d.\n", rt_get_errno());
+            rt_kprintf("statfs failed: errno=%ld.\n", rt_get_errno());
         return -1;
     }
 
@@ -647,7 +649,7 @@ int df(const char *path)
         cap = cap / 1024;
     }
 
-    rt_kprintf("disk free: %d.%d %s [ %d block, %d bytes per block ]\n",
+    rt_kprintf("disk free: %ld.%d %s [ %d block, %d bytes per block ]\n",
                (unsigned long)cap, minor, unit_str[unit_index], buffer.f_bfree, buffer.f_bsize);
     return 0;
 }

@@ -57,8 +57,8 @@
 
 #ifdef RT_USING_SLAB
 
-#define DBG_TAG           "kernel.slab"
-#define DBG_LVL           DBG_INFO
+#define DBG_TAG "kernel.slab"
+#define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
 /*
@@ -115,28 +115,28 @@
  *    + ability to allocate arbitrarily large chunks of memory
  */
 
-#define ZALLOC_SLAB_MAGIC       0x51ab51ab
-#define ZALLOC_ZONE_LIMIT       (16 * 1024)     /* max slab-managed alloc */
-#define ZALLOC_MIN_ZONE_SIZE    (32 * 1024)     /* minimum zone size */
-#define ZALLOC_MAX_ZONE_SIZE    (128 * 1024)    /* maximum zone size */
-#define ZONE_RELEASE_THRESH     2               /* threshold number of zones */
+#define ZALLOC_SLAB_MAGIC    0x51ab51ab
+#define ZALLOC_ZONE_LIMIT    (16 * 1024)  /* max slab-managed alloc */
+#define ZALLOC_MIN_ZONE_SIZE (32 * 1024)  /* minimum zone size */
+#define ZALLOC_MAX_ZONE_SIZE (128 * 1024) /* maximum zone size */
+#define ZONE_RELEASE_THRESH  2            /* threshold number of zones */
 
 /*
  * Misc constants.  Note that allocations that are exact multiples of
  * RT_MM_PAGE_SIZE, or exceed the zone limit, fall through to the kmem module.
  */
-#define MIN_CHUNK_SIZE      8       /* in bytes */
-#define MIN_CHUNK_MASK      (MIN_CHUNK_SIZE - 1)
+#define MIN_CHUNK_SIZE 8 /* in bytes */
+#define MIN_CHUNK_MASK (MIN_CHUNK_SIZE - 1)
 
 /*
  * Array of descriptors that describe the contents of each page
  */
-#define PAGE_TYPE_FREE      0x00
-#define PAGE_TYPE_SMALL     0x01
-#define PAGE_TYPE_LARGE     0x02
+#define PAGE_TYPE_FREE  0x00
+#define PAGE_TYPE_SMALL 0x01
+#define PAGE_TYPE_LARGE 0x02
 
-#define btokup(addr)    \
-    (&slab->memusage[((rt_ubase_t)(addr) - slab->heap_start) >> RT_MM_PAGE_BITS])
+#define btokup(addr) \
+    (&slab->memusage[((rt_uintptr_t)(addr) - slab->heap_start) >> RT_MM_PAGE_BITS])
 
 /**
  * Base structure of slab memory object
@@ -147,17 +147,17 @@
  */
 struct rt_slab_zone
 {
-    rt_uint32_t  z_magic;                    /**< magic number for sanity check */
-    rt_uint32_t  z_nfree;                    /**< total free chunks / ualloc space in zone */
-    rt_uint32_t  z_nmax;                     /**< maximum free chunks */
-    struct rt_slab_zone *z_next;            /**< zoneary[] link if z_nfree non-zero */
-    rt_uint8_t  *z_baseptr;                 /**< pointer to start of chunk array */
+    rt_uint32_t z_magic;         /**< magic number for sanity check */
+    rt_uint32_t z_nfree;         /**< total free chunks / ualloc space in zone */
+    rt_uint32_t z_nmax;          /**< maximum free chunks */
+    struct rt_slab_zone *z_next; /**< zoneary[] link if z_nfree non-zero */
+    rt_uint8_t *z_baseptr;       /**< pointer to start of chunk array */
 
-    rt_uint32_t  z_uindex;                   /**< current initial allocation index */
-    rt_uint32_t  z_chunksize;                /**< chunk size for validation */
+    rt_uint32_t z_uindex;    /**< current initial allocation index */
+    rt_uint32_t z_chunksize; /**< chunk size for validation */
 
-    rt_uint32_t  z_zoneindex;                /**< zone index */
-    struct rt_slab_chunk  *z_freechunk;     /**< free chunk list */
+    rt_uint32_t z_zoneindex;           /**< zone index */
+    struct rt_slab_chunk *z_freechunk; /**< free chunk list */
 };
 
 /*
@@ -170,8 +170,8 @@ struct rt_slab_chunk
 
 struct rt_slab_memusage
 {
-    rt_uint32_t     type: 2 ;               /**< page type */
-    rt_uint32_t     size: 30;               /**< pages allocated or offset from zone */
+    rt_uint32_t type : 2;  /**< page type */
+    rt_uint32_t size : 30; /**< pages allocated or offset from zone */
 };
 
 /*
@@ -179,31 +179,31 @@ struct rt_slab_memusage
  */
 struct rt_slab_page
 {
-    struct rt_slab_page *next;      /**< next valid page */
-    rt_size_t page;                 /**< number of page  */
+    struct rt_slab_page *next; /**< next valid page */
+    rt_size_t page;            /**< number of page  */
 
     /* dummy */
     char dummy[RT_MM_PAGE_SIZE - (sizeof(struct rt_slab_page *) + sizeof(rt_size_t))];
 };
 
-#define RT_SLAB_NZONES                  72              /* number of zones */
+#define RT_SLAB_NZONES 72 /* number of zones */
 
 /*
  * slab object
  */
 struct rt_slab
 {
-    struct rt_memory            parent;                         /**< inherit from rt_memory */
-    rt_ubase_t                  heap_start;                     /**< memory start address */
-    rt_ubase_t                  heap_end;                       /**< memory end address */
-    struct rt_slab_memusage    *memusage;
-    struct rt_slab_zone        *zone_array[RT_SLAB_NZONES];     /* linked list of zones NFree > 0 */
-    struct rt_slab_zone        *zone_free;                      /* whole zones that have become free */
-    rt_uint32_t                 zone_free_cnt;
-    rt_uint32_t                 zone_size;
-    rt_uint32_t                 zone_limit;
-    rt_uint32_t                 zone_page_cnt;
-    struct rt_slab_page        *page_list;
+    struct rt_memory parent; /**< inherit from rt_memory */
+    rt_uintptr_t heap_start; /**< memory start address */
+    rt_uintptr_t heap_end;   /**< memory end address */
+    struct rt_slab_memusage *memusage;
+    struct rt_slab_zone *zone_array[RT_SLAB_NZONES]; /* linked list of zones NFree > 0 */
+    struct rt_slab_zone *zone_free;                  /* whole zones that have become free */
+    rt_uint32_t zone_free_cnt;
+    rt_uint32_t zone_size;
+    rt_uint32_t zone_limit;
+    rt_uint32_t zone_page_cnt;
+    struct rt_slab_page *page_list;
 };
 
 /**
@@ -220,17 +220,19 @@ void *rt_slab_page_alloc(rt_slab_t m, rt_size_t npages)
     struct rt_slab *slab = (struct rt_slab *)m;
 
     if (npages == 0)
+    {
         return RT_NULL;
+    }
 
     for (prev = &slab->page_list; (b = *prev) != RT_NULL; prev = &(b->next))
     {
         if (b->page > npages)
         {
             /* splite pages */
-            n       = b + npages;
+            n = b + npages;
             n->next = b->next;
             n->page = b->page - npages;
-            *prev   = n;
+            *prev = n;
             break;
         }
 
@@ -261,7 +263,7 @@ void rt_slab_page_free(rt_slab_t m, void *addr, rt_size_t npages)
     struct rt_slab *slab = (struct rt_slab *)m;
 
     RT_ASSERT(addr != RT_NULL);
-    RT_ASSERT((rt_ubase_t)addr % RT_MM_PAGE_SIZE == 0);
+    RT_ASSERT((rt_uintptr_t)addr % RT_MM_PAGE_SIZE == 0);
     RT_ASSERT(npages != 0);
 
     n = (struct rt_slab_page *)addr;
@@ -276,7 +278,7 @@ void rt_slab_page_free(rt_slab_t m, void *addr, rt_size_t npages)
             if (b + (b->page += npages) == b->next)
             {
                 b->page += b->next->page;
-                b->next  = b->next->next;
+                b->next = b->next->next;
             }
             return;
         }
@@ -285,17 +287,19 @@ void rt_slab_page_free(rt_slab_t m, void *addr, rt_size_t npages)
         {
             n->page = b->page + npages;
             n->next = b->next;
-            *prev   = n;
+            *prev = n;
             return;
         }
 
         if (b > n + npages)
+        {
             break;
+        }
     }
 
     n->page = npages;
     n->next = b;
-    *prev   = n;
+    *prev = n;
 }
 
 /*
@@ -324,23 +328,23 @@ static void rt_slab_page_init(struct rt_slab *slab, void *addr, rt_size_t npages
 rt_slab_t rt_slab_init(const char *name, void *begin_addr, rt_size_t size)
 {
     rt_uint32_t limsize, npages;
-    rt_ubase_t start_addr, begin_align, end_align;
+    rt_uintptr_t start_addr, begin_align, end_align;
     struct rt_slab *slab;
 
-    slab = (struct rt_slab *)RT_ALIGN((rt_ubase_t)begin_addr, RT_ALIGN_SIZE);
-    start_addr = (rt_ubase_t)slab + sizeof(*slab);
+    slab = (struct rt_slab *)RT_ALIGN((rt_uintptr_t)begin_addr, RT_ALIGN_SIZE);
+    start_addr = (rt_uintptr_t)slab + sizeof(*slab);
     /* align begin and end addr to page */
-    begin_align = RT_ALIGN((rt_ubase_t)start_addr, RT_MM_PAGE_SIZE);
-    end_align   = RT_ALIGN_DOWN((rt_ubase_t)begin_addr + size, RT_MM_PAGE_SIZE);
+    begin_align = RT_ALIGN((rt_uintptr_t)start_addr, RT_MM_PAGE_SIZE);
+    end_align = RT_ALIGN_DOWN((rt_uintptr_t)begin_addr + size, RT_MM_PAGE_SIZE);
     if (begin_align >= end_align)
     {
         rt_kprintf("slab init errr. wrong address[0x%x - 0x%x]\n",
-                   (rt_ubase_t)begin_addr, (rt_ubase_t)begin_addr + size);
+                   (rt_uintptr_t)begin_addr, (rt_uintptr_t)begin_addr + size);
         return RT_NULL;
     }
 
     limsize = end_align - begin_align;
-    npages  = limsize / RT_MM_PAGE_SIZE;
+    npages = limsize / RT_MM_PAGE_SIZE;
     LOG_D("heap[0x%x - 0x%x], size 0x%x, 0x%x pages",
           begin_align, end_align, limsize, npages);
 
@@ -361,11 +365,15 @@ rt_slab_t rt_slab_init(const char *name, void *begin_addr, rt_size_t size)
     /* calculate zone size */
     slab->zone_size = ZALLOC_MIN_ZONE_SIZE;
     while (slab->zone_size < ZALLOC_MAX_ZONE_SIZE && (slab->zone_size << 1) < (limsize / 1024))
+    {
         slab->zone_size <<= 1;
+    }
 
     slab->zone_limit = slab->zone_size / 4;
     if (slab->zone_limit > ZALLOC_ZONE_LIMIT)
+    {
         slab->zone_limit = ZALLOC_ZONE_LIMIT;
+    }
 
     slab->zone_page_cnt = slab->zone_size / RT_MM_PAGE_SIZE;
 
@@ -373,12 +381,12 @@ rt_slab_t rt_slab_init(const char *name, void *begin_addr, rt_size_t size)
           slab->zone_size, slab->zone_page_cnt);
 
     /* allocate slab->memusage array */
-    limsize  = npages * sizeof(struct rt_slab_memusage);
-    limsize  = RT_ALIGN(limsize, RT_MM_PAGE_SIZE);
+    limsize = npages * sizeof(struct rt_slab_memusage);
+    limsize = RT_ALIGN(limsize, RT_MM_PAGE_SIZE);
     slab->memusage = rt_slab_page_alloc((rt_slab_t)(&slab->parent), limsize / RT_MM_PAGE_SIZE);
 
     LOG_D("slab->memusage 0x%x, size 0x%x",
-          (rt_ubase_t)slab->memusage, limsize);
+          (rt_uintptr_t)slab->memusage, limsize);
     return &slab->parent;
 }
 RTM_EXPORT(rt_slab_init);
@@ -411,7 +419,7 @@ RTM_EXPORT(rt_slab_detach);
 rt_inline int zoneindex(rt_size_t *bytes)
 {
     /* unsigned for shift opt */
-    rt_ubase_t n = (rt_ubase_t)(*bytes);
+    rt_uintptr_t n = (rt_uintptr_t)(*bytes);
 
     if (n < 128)
     {
@@ -469,7 +477,7 @@ rt_inline int zoneindex(rt_size_t *bytes)
 }
 
 /**
- * @addtogroup MM
+ * @addtogroup group_memory_management
  */
 
 /**@{*/
@@ -497,7 +505,9 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
 
     /* zero size, return RT_NULL */
     if (size == 0)
+    {
         return RT_NULL;
+    }
 
     /*
      * Handle large allocations directly.  There should not be very many of
@@ -509,7 +519,9 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
 
         chunk = rt_slab_page_alloc(m, size >> RT_MM_PAGE_BITS);
         if (chunk == RT_NULL)
+        {
             return RT_NULL;
+        }
 
         /* set kup */
         kup = btokup(chunk);
@@ -519,11 +531,13 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
         LOG_D("alloc a large memory 0x%x, page cnt %d, kup %d",
               size,
               size >> RT_MM_PAGE_BITS,
-              ((rt_ubase_t)chunk - slab->heap_start) >> RT_MM_PAGE_BITS);
+              ((rt_uintptr_t)chunk - slab->heap_start) >> RT_MM_PAGE_BITS);
         /* mem stat */
         slab->parent.used += size;
         if (slab->parent.used > slab->parent.max)
+        {
             slab->parent.max = slab->parent.used;
+        }
         return chunk;
     }
 
@@ -573,7 +587,9 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
         /* mem stats */
         slab->parent.used += z->z_chunksize;
         if (slab->parent.used > slab->parent.max)
+        {
             slab->parent.max = slab->parent.used;
+        }
 
         return chunk;
     }
@@ -593,7 +609,7 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
         {
             /* remove zone from free zone list */
             slab->zone_free = z->z_next;
-            -- slab->zone_free_cnt;
+            --slab->zone_free_cnt;
         }
         else
         {
@@ -605,15 +621,15 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
             }
 
             LOG_D("alloc a new zone: 0x%x",
-                  (rt_ubase_t)z);
+                  (rt_uintptr_t)z);
 
             /* set message usage */
-            for (off = 0, kup = btokup(z); off < slab->zone_page_cnt; off ++)
+            for (off = 0, kup = btokup(z); off < slab->zone_page_cnt; off++)
             {
                 kup->type = PAGE_TYPE_SMALL;
                 kup->size = off;
 
-                kup ++;
+                kup++;
             }
         }
 
@@ -628,16 +644,20 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
          * Otherwise just 8-byte align the data.
          */
         if ((size | (size - 1)) + 1 == (size << 1))
+        {
             off = (off + size - 1) & ~(size - 1);
+        }
         else
+        {
             off = (off + MIN_CHUNK_MASK) & ~MIN_CHUNK_MASK;
+        }
 
-        z->z_magic     = ZALLOC_SLAB_MAGIC;
+        z->z_magic = ZALLOC_SLAB_MAGIC;
         z->z_zoneindex = zi;
-        z->z_nmax      = (slab->zone_size - off) / size;
-        z->z_nfree     = z->z_nmax - 1;
-        z->z_baseptr   = (rt_uint8_t *)z + off;
-        z->z_uindex    = 0;
+        z->z_nmax = (slab->zone_size - off) / size;
+        z->z_nfree = z->z_nmax - 1;
+        z->z_baseptr = (rt_uint8_t *)z + off;
+        z->z_uindex = 0;
         z->z_chunksize = size;
 
         chunk = (struct rt_slab_chunk *)(z->z_baseptr + z->z_uindex * size);
@@ -648,7 +668,9 @@ void *rt_slab_alloc(rt_slab_t m, rt_size_t size)
         /* mem stats */
         slab->parent.used += z->z_chunksize;
         if (slab->parent.used > slab->parent.max)
+        {
             slab->parent.max = slab->parent.used;
+        }
     }
 
     return chunk;
@@ -674,7 +696,9 @@ void *rt_slab_realloc(rt_slab_t m, void *ptr, rt_size_t size)
     struct rt_slab *slab = (struct rt_slab *)m;
 
     if (ptr == RT_NULL)
+    {
         return rt_slab_alloc(m, size);
+    }
 
     if (size == 0)
     {
@@ -686,14 +710,16 @@ void *rt_slab_realloc(rt_slab_t m, void *ptr, rt_size_t size)
      * Get the original allocation's zone.  If the new request winds up
      * using the same chunk size we do not have to do anything.
      */
-    kup = btokup((rt_ubase_t)ptr & ~RT_MM_PAGE_MASK);
+    kup = btokup((rt_uintptr_t)ptr & ~RT_MM_PAGE_MASK);
     if (kup->type == PAGE_TYPE_LARGE)
     {
         rt_size_t osize;
 
         osize = kup->size << RT_MM_PAGE_BITS;
         if ((nptr = rt_slab_alloc(m, size)) == RT_NULL)
+        {
             return RT_NULL;
+        }
         rt_memcpy(nptr, ptr, size > osize ? osize : size);
         rt_slab_free(m, ptr);
 
@@ -701,13 +727,15 @@ void *rt_slab_realloc(rt_slab_t m, void *ptr, rt_size_t size)
     }
     else if (kup->type == PAGE_TYPE_SMALL)
     {
-        z = (struct rt_slab_zone *)(((rt_ubase_t)ptr & ~RT_MM_PAGE_MASK) -
-                          kup->size * RT_MM_PAGE_SIZE);
+        z = (struct rt_slab_zone *)(((rt_uintptr_t)ptr & ~RT_MM_PAGE_MASK) -
+                                    kup->size * RT_MM_PAGE_SIZE);
         RT_ASSERT(z->z_magic == ZALLOC_SLAB_MAGIC);
 
         zoneindex(&size);
         if (z->z_chunksize == size)
+        {
             return (ptr); /* same chunk */
+        }
 
         /*
          * Allocate memory for the new request size.  Note that zoneindex has
@@ -715,7 +743,9 @@ void *rt_slab_realloc(rt_slab_t m, void *ptr, rt_size_t size)
          * should optimize our bcopy().  Then copy and return the new pointer.
          */
         if ((nptr = rt_slab_alloc(m, size)) == RT_NULL)
+        {
             return RT_NULL;
+        }
 
         rt_memcpy(nptr, ptr, size > z->z_chunksize ? z->z_chunksize : size);
         rt_slab_free(m, ptr);
@@ -744,24 +774,26 @@ void rt_slab_free(rt_slab_t m, void *ptr)
 
     /* free a RT_NULL pointer */
     if (ptr == RT_NULL)
-        return ;
+    {
+        return;
+    }
 
     /* get memory usage */
 #if (DBG_LVL == DBG_LOG)
     {
-        rt_ubase_t addr = ((rt_ubase_t)ptr & ~RT_MM_PAGE_MASK);
+        rt_uintptr_t addr = ((rt_uintptr_t)ptr & ~RT_MM_PAGE_MASK);
         LOG_D("free a memory 0x%x and align to 0x%x, kup index %d",
-              (rt_ubase_t)ptr,
-              (rt_ubase_t)addr,
-              ((rt_ubase_t)(addr) - slab->heap_start) >> RT_MM_PAGE_BITS);
+              (rt_uintptr_t)ptr,
+              (rt_uintptr_t)addr,
+              ((rt_uintptr_t)(addr)-slab->heap_start) >> RT_MM_PAGE_BITS);
     }
 #endif /* DBG_LVL == DBG_LOG */
 
-    kup = btokup((rt_ubase_t)ptr & ~RT_MM_PAGE_MASK);
+    kup = btokup((rt_uintptr_t)ptr & ~RT_MM_PAGE_MASK);
     /* release large allocation */
     if (kup->type == PAGE_TYPE_LARGE)
     {
-        rt_ubase_t size;
+        rt_uintptr_t size;
 
         /* clear page counter */
         size = kup->size;
@@ -770,7 +802,7 @@ void rt_slab_free(rt_slab_t m, void *ptr)
         slab->parent.used -= size * RT_MM_PAGE_SIZE;
 
         LOG_D("free large memory block 0x%x, page count %d",
-              (rt_ubase_t)ptr, size);
+              (rt_uintptr_t)ptr, size);
 
         /* free this page */
         rt_slab_page_free(m, ptr, size);
@@ -779,12 +811,12 @@ void rt_slab_free(rt_slab_t m, void *ptr)
     }
 
     /* zone case. get out zone. */
-    z = (struct rt_slab_zone *)(((rt_ubase_t)ptr & ~RT_MM_PAGE_MASK) -
-                      kup->size * RT_MM_PAGE_SIZE);
+    z = (struct rt_slab_zone *)(((rt_uintptr_t)ptr & ~RT_MM_PAGE_MASK) -
+                                kup->size * RT_MM_PAGE_SIZE);
     RT_ASSERT(z->z_magic == ZALLOC_SLAB_MAGIC);
 
-    chunk          = (struct rt_slab_chunk *)ptr;
-    chunk->c_next  = z->z_freechunk;
+    chunk = (struct rt_slab_chunk *)ptr;
+    chunk->c_next = z->z_freechunk;
     z->z_freechunk = chunk;
     /* mem stats */
     slab->parent.used -= z->z_chunksize;
@@ -810,12 +842,11 @@ void rt_slab_free(rt_slab_t m, void *ptr)
     {
         struct rt_slab_zone **pz;
 
-        LOG_D("free zone 0x%x",
-              (rt_ubase_t)z, z->z_zoneindex);
+        LOG_D("free zone %#x, zoneindex %d",
+              (rt_uintptr_t)z, z->z_zoneindex);
 
         /* remove zone from zone array list */
-        for (pz = &slab->zone_array[z->z_zoneindex]; z != *pz; pz = &(*pz)->z_next)
-            ;
+        for (pz = &slab->zone_array[z->z_zoneindex]; z != *pz; pz = &(*pz)->z_next);
         *pz = z->z_next;
 
         /* reset zone */
@@ -825,23 +856,23 @@ void rt_slab_free(rt_slab_t m, void *ptr)
         z->z_next = slab->zone_free;
         slab->zone_free = z;
 
-        ++ slab->zone_free_cnt;
+        ++slab->zone_free_cnt;
 
         /* release zone to page allocator */
         if (slab->zone_free_cnt > ZONE_RELEASE_THRESH)
         {
             register rt_uint32_t i;
 
-            z         = slab->zone_free;
+            z = slab->zone_free;
             slab->zone_free = z->z_next;
-            -- slab->zone_free_cnt;
+            --slab->zone_free_cnt;
 
             /* set message usage */
-            for (i = 0, kup = btokup(z); i < slab->zone_page_cnt; i ++)
+            for (i = 0, kup = btokup(z); i < slab->zone_page_cnt; i++)
             {
                 kup->type = PAGE_TYPE_FREE;
                 kup->size = 0;
-                kup ++;
+                kup++;
             }
 
             /* release pages */

@@ -22,7 +22,7 @@
 /* exception and interrupt handler table */
 struct rt_irq_desc irq_desc[MAX_HANDLERS];
 
-extern volatile rt_uint8_t rt_interrupt_nest;
+extern volatile rt_atomic_t rt_interrupt_nest;
 
 /* exception and interrupt handler table */
 rt_uint32_t rt_interrupt_from_thread, rt_interrupt_to_thread;
@@ -36,7 +36,7 @@ rt_uint32_t rt_thread_switch_interrupt_flag;
 
 static void rt_hw_int_not_handle(int vector, void *param)
 {
-    rt_kprintf("Unhandled interrupt %d occured!!!\n", vector);
+    rt_kprintf("Unhandled interrupt %d occurred!!!\n", vector);
 }
 
 #define vimRAM (0xFFF82000U)

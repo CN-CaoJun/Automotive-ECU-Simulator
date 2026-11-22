@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2026, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -23,6 +23,10 @@
 #include <rtthread.h>
 #include <rtatomic.h>
 
+#if defined(RT_USING_SMART) && defined(RT_USING_VDSO)
+#include "vdso_kernel.h"
+#endif
+
 #ifdef RT_USING_SMP
 #define rt_tick rt_cpu_index(0)->tick
 #else
@@ -33,7 +37,7 @@ static volatile rt_atomic_t rt_tick = 0;
 static void (*rt_tick_hook)(void);
 
 /**
- * @addtogroup Hook
+ * @addtogroup group_hook
  */
 
 /**@{*/
@@ -52,7 +56,7 @@ void rt_tick_sethook(void (*hook)(void))
 #endif /* RT_USING_HOOK */
 
 /**
- * @addtogroup Clock
+ * @addtogroup group_clock_management
  */
 
 /**@{*/
@@ -70,6 +74,24 @@ rt_tick_t rt_tick_get(void)
 RTM_EXPORT(rt_tick_get);
 
 /**
+ * @brief    This function will return delta tick from base.
+ *
+ * @param    base to consider
+ *
+ * @return   Return delta tick.
+ */
+rt_tick_t rt_tick_get_delta(rt_tick_t base)
+{
+    rt_tick_t tnow = rt_tick_get();
+    if (tnow >= base)
+    {
+        return tnow - base;
+    }
+    return RT_TICK_MAX - base + tnow + 1;
+}
+RTM_EXPORT(rt_tick_get_delta);
+
+/**
  * @brief    This function will set current tick.
  *
  * @param    tick is the value that you will set.
@@ -78,6 +100,38 @@ void rt_tick_set(rt_tick_t tick)
 {
     rt_atomic_store(&(rt_tick), tick);
 }
+
+#ifdef RT_USING_CPU_USAGE_TRACER
+static void _update_process_times(rt_tick_t tick)
+{
+    struct rt_thread *thread = rt_thread_self();
+    struct rt_cpu *pcpu = rt_cpu_self();
+
+#ifdef RT_USING_SMART
+    if (!LWP_IS_USER_MODE(thread))
+    {
+        thread->user_time += tick;
+        pcpu->cpu_stat.user += tick;
+    }
+    else
+#endif /* RT_USING_SMART */
+    {
+        thread->system_time += tick;
+        if (thread == pcpu->idle_thread)
+        {
+            pcpu->cpu_stat.idle += tick;
+        }
+        else
+        {
+            pcpu->cpu_stat.system += tick;
+        }
+    }
+}
+
+#else
+
+#define _update_process_times(tick)
+#endif /* RT_USING_CPU_USAGE_TRACER */
 
 /**
  * @brief    This function will notify kernel there is one tick passed.
@@ -88,6 +142,10 @@ void rt_tick_increase(void)
     RT_ASSERT(rt_interrupt_get_nest() > 0);
 
     RT_OBJECT_HOOK_CALL(rt_tick_hook, ());
+
+    /* tracing cpu usage */
+    _update_process_times(1);
+
     /* increase the global tick */
 #ifdef RT_USING_SMP
     /* get percpu and increase the tick */
@@ -97,11 +155,49 @@ void rt_tick_increase(void)
 #endif /* RT_USING_SMP */
 
     /* check time slice */
-    rt_sched_tick_increase();
+    rt_sched_tick_increase(1);
 
     /* check timer */
 #ifdef RT_USING_SMP
-    if (rt_hw_cpu_id() != 0)
+    if (rt_cpu_get_id() != 0)
+    {
+        return;
+    }
+#endif
+    rt_timer_check();
+
+#ifdef RT_USING_VDSO
+    rt_vdso_sync_clock_data();
+#endif
+}
+
+/**
+ * @brief    This function will notify kernel there is n tick passed.
+ *           Normally, this function is invoked by clock ISR.
+ */
+void rt_tick_increase_tick(rt_tick_t tick)
+{
+    RT_ASSERT(rt_interrupt_get_nest() > 0);
+
+    RT_OBJECT_HOOK_CALL(rt_tick_hook, ());
+
+    /* tracing cpu usage */
+    _update_process_times(tick);
+
+    /* increase the global tick */
+#ifdef RT_USING_SMP
+    /* get percpu and increase the tick */
+    rt_atomic_add(&(rt_cpu_self()->tick), tick);
+#else
+    rt_atomic_add(&(rt_tick), tick);
+#endif /* RT_USING_SMP */
+
+    /* check time slice */
+    rt_sched_tick_increase(tick);
+
+    /* check timer */
+#ifdef RT_USING_SMP
+    if (rt_cpu_get_id() != 0)
     {
         return;
     }
@@ -129,8 +225,12 @@ rt_tick_t rt_tick_from_millisecond(rt_int32_t ms)
     }
     else
     {
+#if RT_TICK_PER_SECOND == 1000u
+        tick = ms;
+#else
         tick = RT_TICK_PER_SECOND * (ms / 1000);
         tick += (RT_TICK_PER_SECOND * (ms % 1000) + 999) / 1000;
+#endif /* RT_TICK_PER_SECOND == 1000u */
     }
 
     /* return the calculated tick */
@@ -149,17 +249,18 @@ RTM_EXPORT(rt_tick_from_millisecond);
  */
 rt_weak rt_tick_t rt_tick_get_millisecond(void)
 {
-#if RT_TICK_PER_SECOND == 0 // make cppcheck happy
+#if RT_TICK_PER_SECOND == 0 /* make cppcheck happy*/
 #error "RT_TICK_PER_SECOND must be greater than zero"
 #endif
 
 #if 1000 % RT_TICK_PER_SECOND == 0u
     return rt_tick_get() * (1000u / RT_TICK_PER_SECOND);
 #else
-    #warning "rt-thread cannot provide a correct 1ms-based tick any longer,\
+#warning "rt-thread cannot provide a correct 1ms-based tick any longer,\
     please redefine this function in another file by using a high-precision hard-timer."
     return 0;
 #endif /* 1000 % RT_TICK_PER_SECOND == 0u */
 }
 
 /**@}*/
+

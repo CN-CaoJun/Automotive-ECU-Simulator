@@ -10,12 +10,15 @@
  * 2013-06-18     aozima       add restore MSP feature.
  * 2013-06-23     aozima       support lazy stack optimized.
  * 2018-07-24     aozima       enhancement hard fault exception handler.
+ * 2024-08-13     Evlers       allows rewrite to interrupt enable/disable api to support independent interrupts management
  */
 
 /**
  * @addtogroup cortex-m4
  */
 /*@{*/
+
+#include <rtconfig.h>
 
 .cpu cortex-m4
 .syntax unified
@@ -32,6 +35,7 @@
  * rt_base_t rt_hw_interrupt_disable();
  */
 .global rt_hw_interrupt_disable
+.weak rt_hw_interrupt_disable
 .type rt_hw_interrupt_disable, %function
 rt_hw_interrupt_disable:
     MRS     r0, PRIMASK
@@ -42,6 +46,7 @@ rt_hw_interrupt_disable:
  * void rt_hw_interrupt_enable(rt_base_t level);
  */
 .global rt_hw_interrupt_enable
+.weak rt_hw_interrupt_enable
 .type rt_hw_interrupt_enable, %function
 rt_hw_interrupt_enable:
     MSR     PRIMASK, r0
@@ -152,6 +157,13 @@ switch_to_thread:
     BICNE   lr, lr, #0x10       /* lr &= ~(1 << 4), set FPCA. */
 #endif
 
+#if defined (RT_USING_MEM_PROTECTION)
+    PUSH    {r0-r3, r12, lr}
+    BL      rt_thread_self
+    BL      rt_hw_mpu_table_switch
+    POP     {r0-r3, r12, lr}
+#endif
+
 pendsv_exit:
     /* restore interrupt */
     MSR PRIMASK, r2
@@ -208,6 +220,10 @@ rt_hw_context_switch_to:
     CPSIE   F
     CPSIE   I
 
+    /* clear the BASEPRI register to disable masking priority */
+    MOV     r0, #0x00
+    MSR     BASEPRI, r0
+
     /* ensure PendSV exception taken place before subsequent operation */
     DSB
     ISB
@@ -231,10 +247,23 @@ HardFault_Handler:
     MRS     r0, psp                 /* get fault context from thread. */
 _get_sp_done:
 
-    STMFD   r0!, {r4 - r11}         /* push r4 - r11 register */
 #if defined (__VFP_FP__) && !defined(__SOFTFP__)
-    STMFD   r0!, {lr}               /* push dummy for flag */
+    TST     lr, #0x10               /* if(!EXC_RETURN[4]) */
+    IT      EQ
+    VSTMDBEQ r0!, {d8 - d15}        /* push FPU register s16~s31 */
 #endif
+
+    STMFD   r0!, {r4 - r11}         /* push r4 - r11 register */
+
+#if defined (__VFP_FP__) && !defined(__SOFTFP__)
+    MOV     r4, #0x00               /* flag = 0 */
+
+    TST     lr, #0x10               /* if(!EXC_RETURN[4]) */
+    IT      EQ
+    MOVEQ   r4, #0x01               /* flag = 1 */
+    STMFD   r0!, {r4}               /* push flag */
+#endif
+
     STMFD   r0!, {lr}               /* push exec_return register */
 
     TST     lr, #0x04               /* if(!EXC_RETURN[2]) */

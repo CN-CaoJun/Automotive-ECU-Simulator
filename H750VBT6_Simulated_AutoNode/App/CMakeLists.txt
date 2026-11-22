@@ -126,6 +126,8 @@ INCLUDE_DIRECTORIES(
 	rt-thread/components/libc/posix/io/eventfd
 	rt-thread/components/libc/posix/io/poll
 	rt-thread/components/libc/posix/ipc
+	rt-thread/components/net/lwip/lwip-2.1.2/src/include
+	rt-thread/components/net/lwip/port
 	rt-thread/components/utilities/ulog
 	rt-thread/components/utilities/ulog/syslog
 	cubemx
@@ -140,6 +142,7 @@ ADD_DEFINITIONS(
 	-DUSE_HAL_DRIVER
 	-D_POSIX_C_SOURCE=1
 	-D__RTTHREAD__
+	-D__RT_KERNEL_SOURCE__
 )
 
 IF(APP_IN_QSPI)
@@ -157,9 +160,14 @@ SET(PROJECT_SOURCES
 	rt-thread/components/libc/compilers/common/cunistd.c
 	rt-thread/components/libc/compilers/common/cwchar.c
 	rt-thread/components/libc/compilers/newlib/syscalls.c
-	rt-thread/components/drivers/can/can.c
+	rt-thread/components/drivers/can/dev_can.c
+	rt-thread/components/drivers/block/blk.c
+	rt-thread/components/drivers/block/blk_dev.c
+	rt-thread/components/drivers/block/blk_dfs.c
+	rt-thread/components/drivers/block/blk_partition.c
 	rt-thread/components/drivers/core/device.c
-	rt-thread/components/drivers/ipc/completion.c
+	rt-thread/components/drivers/ipc/completion_comm.c
+	rt-thread/components/drivers/ipc/completion_up.c
 	rt-thread/components/drivers/ipc/condvar.c
 	rt-thread/components/drivers/ipc/dataqueue.c
 	rt-thread/components/drivers/ipc/pipe.c
@@ -167,14 +175,15 @@ SET(PROJECT_SOURCES
 	rt-thread/components/drivers/ipc/ringbuffer.c
 	rt-thread/components/drivers/ipc/waitqueue.c
 	rt-thread/components/drivers/ipc/workqueue.c
-	rt-thread/components/drivers/pin/pin.c
-	rt-thread/components/drivers/sdio/block_dev.c
-	rt-thread/components/drivers/sdio/gpt.c
-	rt-thread/components/drivers/sdio/mmc.c
-	rt-thread/components/drivers/sdio/mmcsd_core.c
-	rt-thread/components/drivers/sdio/sd.c
-	rt-thread/components/drivers/sdio/sdio.c
-	rt-thread/components/drivers/serial/serial.c
+	rt-thread/components/drivers/pin/dev_pin.c
+	rt-thread/components/drivers/serial/dev_serial.c
+	rt-thread/components/drivers/sdio/dev_block.c
+	rt-thread/components/drivers/sdio/dev_mmc.c
+	rt-thread/components/drivers/sdio/dev_mmcsd_core.c
+	rt-thread/components/drivers/sdio/dev_sd.c
+	rt-thread/components/drivers/sdio/dev_sdio.c
+	rt-thread/components/drivers/spi/spi_core.c
+	rt-thread/components/drivers/spi/spi_dev.c
 	rt-thread/components/dfs/dfs_v1/filesystems/devfs/devfs.c
 	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/dfs_elm.c
 	rt-thread/components/dfs/dfs_v1/filesystems/elmfat/ff.c
@@ -190,11 +199,16 @@ SET(PROJECT_SOURCES
 	rt-thread/components/finsh/shell.c
 	rt-thread/src/clock.c
 	rt-thread/src/components.c
+	rt-thread/src/cpu_up.c
+	rt-thread/src/defunct.c
 	rt-thread/src/idle.c
 	rt-thread/src/ipc.c
 	rt-thread/src/irq.c
+	rt-thread/src/klibc/kerrno.c
 	rt-thread/src/klibc/kstdio.c
 	rt-thread/src/klibc/kstring.c
+	rt-thread/src/klibc/rt_vsnprintf_tiny.c
+	rt-thread/src/klibc/rt_vsscanf.c
 	rt-thread/src/kservice.c
 	rt-thread/src/mem.c
 	rt-thread/src/mempool.c
@@ -230,6 +244,46 @@ SET(PROJECT_SOURCES
 	drivers/drv_usbh.c
 	drivers/drv_wdt.c
 	drivers/drv_fdcan.c
+	cubemx/Src/stm32h7xx_hal_msp.c
+	rt-thread/components/net/lwip/port/ethernetif.c
+	rt-thread/components/net/lwip/port/sys_arch.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/netif/ethernet.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/autoip.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/dhcp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/etharp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/icmp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/igmp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/ip4.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/ip4_addr.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ipv4/ip4_frag.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/altcp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/altcp_alloc.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/altcp_tcp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/def.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/dns.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/inet_chksum.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/init.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/ip.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/memp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/netif.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/pbuf.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/raw.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/stats.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/sys.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/tcp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/tcp_in.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/tcp_out.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/timeouts.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/core/udp.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/api_lib.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/api_msg.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/err.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/if_api.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/netbuf.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/netdb.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/netifapi.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/sockets.c
+	rt-thread/components/net/lwip/lwip-2.1.2/src/api/tcpip.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc.c
 	libraries/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc_ex.c

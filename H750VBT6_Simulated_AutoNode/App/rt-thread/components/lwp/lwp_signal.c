@@ -27,6 +27,11 @@
 #include "sys/signal.h"
 #include "syscall_generic.h"
 
+rt_inline rt_err_t valid_signo_check(unsigned long sig)
+{
+    return sig <= _LWP_NSIG ? 0 : -RT_EINVAL;
+}
+
 static lwp_siginfo_t siginfo_create(rt_thread_t current, int signo, int code, lwp_siginfo_ext_t ext)
 {
     lwp_siginfo_t siginfo;
@@ -250,9 +255,10 @@ static void sigqueue_enqueue(lwp_sigqueue_t sigqueue, lwp_siginfo_t siginfo)
     rt_bool_t inserted = RT_FALSE;
     rt_list_for_each_entry(idx, &sigqueue->siginfo_list, node)
     {
-        if (idx->ksiginfo.signo >= siginfo->ksiginfo.signo)
+        /* Keep ascending signal order and FIFO order for equal signals. */
+        if (idx->ksiginfo.signo > siginfo->ksiginfo.signo)
         {
-            rt_list_insert_after(&idx->node, &siginfo->node);
+            rt_list_insert_before(&idx->node, &siginfo->node);
             inserted = RT_TRUE;
             break;
         }
@@ -440,6 +446,60 @@ static void lwp_signal_notify(rt_slist_t *list_head, lwp_siginfo_t siginfo)
         {
             n->notify(n->signalfd_queue, siginfo->ksiginfo.signo);
         }
+    }
+}
+
+void lwp_signal_notify_add(struct rt_lwp *lwp, struct rt_lwp_notify *notify)
+{
+    LWP_ASSERT_LOCKED(lwp);
+
+    rt_slist_append(&lwp->signalfd_notify_head, &notify->list_node);
+}
+
+void lwp_signal_notify_remove_queue(struct rt_lwp *lwp, rt_wqueue_t *signalfd_queue)
+{
+    rt_slist_t *prev;
+    rt_slist_t *curr;
+
+    LWP_LOCK(lwp);
+    prev = &lwp->signalfd_notify_head;
+    curr = prev->next;
+    while (curr != RT_NULL)
+    {
+        struct rt_lwp_notify *n = rt_slist_entry(curr, struct rt_lwp_notify, list_node);
+
+        if (n->signalfd_queue == signalfd_queue)
+        {
+            prev->next = curr->next;
+            rt_free(n);
+            curr = prev->next;
+        }
+        else
+        {
+            prev = curr;
+            curr = curr->next;
+        }
+    }
+    LWP_UNLOCK(lwp);
+}
+
+void lwp_signal_notify_detach(struct rt_lwp *lwp)
+{
+    rt_slist_t *node;
+
+    LWP_ASSERT_LOCKED(lwp);
+
+    while ((node = rt_slist_first(&lwp->signalfd_notify_head)) != RT_NULL)
+    {
+        struct rt_lwp_notify *n = rt_slist_entry(node, struct rt_lwp_notify, list_node);
+
+        lwp->signalfd_notify_head.next = node->next;
+        node->next = RT_NULL;
+        if (n->detach)
+        {
+            n->detach(n->signalfd_queue, lwp);
+        }
+        rt_free(n);
     }
 }
 
@@ -1109,6 +1169,16 @@ rt_err_t lwp_signal_action(struct rt_lwp *lwp, int signo,
     rt_list_t *thread_list;
     rt_err_t ret = RT_EOK;
 
+    /*
+     * Signal numbers are 1-based. valid_signo_check() accepts 0 for the
+     * kill(pid, 0) probe, so reject it here as well before using signo - 1
+     * to index sig_action[].
+     */
+    if (signo <= 0 || valid_signo_check(signo))
+    {
+        return -RT_EINVAL;
+    }
+
     if (lwp)
     {
         /** acquire READ access to lwp */
@@ -1432,7 +1502,8 @@ rt_err_t lwp_pgrp_signal_kill(rt_processgroup_t pgrp, long signo, long code,
 
     PGRP_ASSERT_LOCKED(pgrp);
 
-    if (pgrp)
+    rc = valid_signo_check(signo);
+    if (pgrp && !rc)
     {
         rt_list_for_each_entry(lwp, &pgrp->process, pgrp_node)
         {
@@ -1441,4 +1512,42 @@ rt_err_t lwp_pgrp_signal_kill(rt_processgroup_t pgrp, long signo, long code,
     }
 
     return rc;
+}
+
+struct kill_all_param
+{
+    long signo;
+    long code;
+    lwp_siginfo_ext_t value;
+};
+
+static int _kill_each(pid_t pid, void *data)
+{
+    struct kill_all_param *param = data;
+    rt_lwp_t lwp;
+    rt_err_t error;
+
+    lwp = lwp_from_pid_locked(pid);
+    if (lwp && !lwp->sig_protected)
+    {
+        error = lwp_signal_kill(lwp, param->signo, param->code, param->value);
+    }
+    else
+    {
+        error = RT_EOK;
+    }
+
+    return error;
+}
+
+rt_err_t lwp_signal_kill_all(long signo, long code, lwp_siginfo_ext_t value)
+{
+    struct kill_all_param buf =
+    {
+        .signo = signo,
+        .code = code,
+        .value = value,
+    };
+
+    return lwp_pid_for_each(_kill_each, &buf);
 }

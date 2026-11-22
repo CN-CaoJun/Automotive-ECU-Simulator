@@ -9,6 +9,7 @@
  */
 
 #include <rtthread.h>
+#include "doip_server.h"
 
 #define DBG_TAG "main"
 #define DBG_LVL DBG_LOG
@@ -25,6 +26,7 @@ static void timer_callback(void *parameter)
 int main(void)
 {
     rtcan_node_start();
+    doip_server_start();
     rt_timer_t timer = rt_timer_create("timer1",  
                                        timer_callback,  
                                        RT_NULL,  

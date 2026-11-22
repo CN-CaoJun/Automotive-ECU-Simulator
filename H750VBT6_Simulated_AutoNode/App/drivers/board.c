@@ -9,8 +9,13 @@
  */
 
 #include <rtthread.h>
+#include <rtdevice.h>
 #include <board.h>
 #include <drv_common.h>
+
+DMA_HandleTypeDef hdma_usart1_tx;
+DMA_HandleTypeDef hdma_usart1_rx;
+
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -93,3 +98,14 @@ void rt_hw_board_init()
 #endif
 
 }
+
+#ifdef BSP_USING_ETH
+void phy_reset(void)
+{
+    rt_pin_mode(ETH_PHY_RESET_PIN, PIN_MODE_OUTPUT);
+    rt_pin_write(ETH_PHY_RESET_PIN, PIN_LOW);
+    rt_thread_mdelay(50);
+    rt_pin_write(ETH_PHY_RESET_PIN, PIN_HIGH);
+    rt_thread_mdelay(100);
+}
+#endif

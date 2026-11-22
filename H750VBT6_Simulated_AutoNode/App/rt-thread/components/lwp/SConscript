@@ -18,29 +18,46 @@ cpu      = rtconfig.CPU
 
 # fix the cpu for risc-v
 if arch == 'risc-v':
-    rv64 = ['virt64', 'c906']
-    if cpu in rv64:
+    if GetDepend('ARCH_CPU_64BIT'):
         cpu = 'rv64'
 
 if platform in platform_file.keys(): # support platforms
     if arch in support_arch.keys() and cpu in support_arch[arch]:
         asm_path = 'arch/' + arch + '/' + cpu + '/*_' + platform_file[platform]
         arch_common = 'arch/' + arch + '/' + 'common/*.c'
+        common = 'arch/common/*.c'
+        common_excluded = []
+        if not GetDepend('RT_USING_VDSO'):
+            common_excluded.append('vdso_kernel.c')
+            src += Glob(arch_common)
+            src += [f for f in Glob(common) if os.path.basename(str(f)) not in common_excluded]
+        else:
+            CPPPATH += [cwd + '/vdso', cwd + '/vdso/kernel']
+            src += Glob(arch_common)
+            src += Glob(common)
         if not GetDepend('ARCH_MM_MMU'):
             excluded_files = ['ioremap.c', 'lwp_futex.c', 'lwp_mm_area.c', 'lwp_pmutex.c', 'lwp_shm.c', 'lwp_user_mm.c']
-            src += [f for f in Glob('*.c') if os.path.basename(str(f)) not in excluded_files] + Glob(asm_path) + Glob(arch_common)
+            src += [f for f in Glob('*.c') if os.path.basename(str(f)) not in excluded_files] + Glob(asm_path)
         else:
-            src += Glob('*.c') + Glob(asm_path) + Glob(arch_common)
+            src += Glob('*.c') + Glob(asm_path)
         src += Glob('arch/' + arch + '/' + cpu + '/*.c')
         CPPPATH = [cwd]
         CPPPATH += [cwd + '/arch/' + arch + '/' + cpu]
 
 # Terminal I/O Subsystem
+# terminal/*.c resolve their own headers via quoted-include directory lookup;
+# keep the internal path out of the global CPPPATH
 termios_path = ['./terminal/', './terminal/freebsd/']
 for item in termios_path:
     src += Glob(item + '*.c')
-CPPPATH += ['./terminal/']
 
-group = DefineGroup('lwP', src, depend = ['RT_USING_SMART'], CPPPATH = CPPPATH)
+# Remove optional sources
+if not GetDepend(['LWP_USING_RUNTIME']):
+    SrcRemove(src, 'lwp_runtime.c')
 
+group = DefineGroup('lwProcess', src, depend = ['RT_USING_SMART'], CPPPATH = CPPPATH)
+
+group = group + SConscript(os.path.join('syscall', 'SConscript'))
+group = group + SConscript(os.path.join('vdso', 'SConscript'))
+group = group + SConscript(os.path.join('utest', 'SConscript'))
 Return('group')

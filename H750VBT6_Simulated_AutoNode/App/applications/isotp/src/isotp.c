@@ -50,9 +50,9 @@ static int isotp_send_flow_control(IsoTpLink* link, uint8_t flow_status, uint8_t
     /* send message */
 #ifdef ISO_TP_FRAME_PADDING
     (void) memset(message.as.flow_control.reserve, 0, sizeof(message.as.flow_control.reserve));
-    ret = isotp_user_send_can(link->send_arbitration_id, message.as.data_array.ptr, sizeof(message));
+    ret = isotp_user_send_can(link->flow_control_arbitration_id, message.as.data_array.ptr, sizeof(message));
 #else    
-    ret = isotp_user_send_can(link->send_arbitration_id,
+    ret = isotp_user_send_can(link->flow_control_arbitration_id,
             message.as.data_array.ptr,
             3);
 #endif
@@ -453,9 +453,9 @@ int isotp_receive(IsoTpLink *link, uint8_t *payload, const uint16_t payload_size
     }
 
     copylen = link->receive_size;
-    // if (copylen > payload_size) {
-    //     copylen = payload_size;
-    // }
+    if (copylen > payload_size) {
+        copylen = payload_size;
+    }
 
     memcpy(payload, link->receive_buffer, copylen);
     *out_size = copylen;
@@ -470,12 +470,19 @@ void isotp_init_link(IsoTpLink *link, uint32_t sendid, uint8_t *sendbuf, uint16_
     link->receive_status = ISOTP_RECEIVE_STATUS_IDLE;
     link->send_status = ISOTP_SEND_STATUS_IDLE;
     link->send_arbitration_id = sendid;
+    link->flow_control_arbitration_id = sendid;
     link->send_buffer = sendbuf;
     link->send_buf_size = sendbufsize;
     link->receive_buffer = recvbuf;
     link->receive_buf_size = recvbufsize;
     
     return;
+}
+
+void isotp_set_flow_control_id(IsoTpLink *link, uint32_t id) {
+    if (link != NULL) {
+        link->flow_control_arbitration_id = id;
+    }
 }
 
 void isotp_poll(IsoTpLink *link) {

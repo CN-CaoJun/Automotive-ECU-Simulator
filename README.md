@@ -33,6 +33,11 @@ Please refer to the docs folder.
 
 完整步骤、手工命令和故障排查见
 [WINDOWS_BUILD_FLASH.md](H750VBT6_Simulated_AutoNode/Docs/WINDOWS_BUILD_FLASH.md)。
+App 与 Boot 当前基于 RT-Thread 5.4.0 主线提交 `6fdfe700`，升级记录见
+[RTTHREAD_UPGRADE.md](H750VBT6_Simulated_AutoNode/Docs/RTTHREAD_UPGRADE.md)。
+硬件对齐和 DoIP 网关说明见
+[HARDWARE_FROM_SCHEMATIC.md](H750VBT6_Simulated_AutoNode/Docs/HARDWARE_FROM_SCHEMATIC.md)
+与 [DOIP.md](H750VBT6_Simulated_AutoNode/Docs/DOIP.md)。
 
 Windows 工具链统一放在 `E:\tools`：
 

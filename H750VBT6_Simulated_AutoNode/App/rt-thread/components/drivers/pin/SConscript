@@ -1,3 +1,4 @@
+import os
 from building import *
 
 group = []
@@ -8,14 +9,22 @@ if not GetDepend(['RT_USING_PIN']):
 cwd = GetCurrentDir()
 CPPPATH = [cwd + '/../include']
 
-src = ['pin.c']
+src = ['dev_pin.c']
 
 if GetDepend(['RT_USING_DM']):
-    src += ['pin_dm.c']
+    src += ['dev_pin_dm.c']
 
 if GetDepend(['RT_USING_OFW']):
-    src += ['pin_ofw.c']
+    src += ['dev_pin_ofw.c']
+
+if GetDepend(['RT_PIN_PL061']):
+    src += ['pin-pl061.c']
 
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+
+list = os.listdir(cwd)
+for item in list:
+    if os.path.isfile(os.path.join(cwd, item, 'SConscript')):
+        group = group + SConscript(os.path.join(item, 'SConscript'))
 
 Return('group')

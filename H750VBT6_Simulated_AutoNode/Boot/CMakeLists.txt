@@ -49,7 +49,13 @@ IF(NOT EXISTS "${CMAKE_C_COMPILER}")
 	MESSAGE(FATAL_ERROR "ARM GCC not found. Set TOOL_DIR or ARM_GCC_ROOT to the toolchain root.")
 ENDIF()
 
-SET(CMAKE_C_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc -Os -gdwarf-2 -g")
+IF(CMAKE_BUILD_TYPE STREQUAL "Debug")
+	SET(BOOT_OPTIMIZATION_FLAGS " -O0 -g3")
+ELSE()
+	SET(BOOT_OPTIMIZATION_FLAGS " -Os -gdwarf-2 -g")
+ENDIF()
+
+SET(CMAKE_C_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc${BOOT_OPTIMIZATION_FLAGS}")
 SET(CMAKE_ASM_FLAGS " -c -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -x assembler-with-cpp -Wa,-mimplicit-it=thumb -gdwarf-2")
 SET(CMAKE_C_COMPILER_WORKS TRUE)
 SET(CMAKE_EXE_LINKER_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections --specs=nosys.specs -Wl,--gc-sections,-Map=boot.map,-cref,-u,Reset_Handler -T ${CMAKE_CURRENT_LIST_DIR}/linkscripts/boot.lds")
@@ -78,6 +84,7 @@ INCLUDE_DIRECTORIES(
 ADD_DEFINITIONS(
 	-DSTM32H750xx
 	-D__RTTHREAD__
+	-D__RT_KERNEL_SOURCE__
 )
 
 SET(BOOT_SOURCES
@@ -86,10 +93,15 @@ SET(BOOT_SOURCES
 	"${CMAKE_CURRENT_LIST_DIR}/board/boot_qspi.c"
 	"${RT_ROOT}/src/clock.c"
 	"${RT_ROOT}/src/components.c"
+	"${RT_ROOT}/src/cpu_up.c"
+	"${RT_ROOT}/src/defunct.c"
 	"${RT_ROOT}/src/idle.c"
+	"${RT_ROOT}/src/ipc.c"
 	"${RT_ROOT}/src/irq.c"
+	"${RT_ROOT}/src/klibc/kerrno.c"
 	"${RT_ROOT}/src/klibc/kstdio.c"
 	"${RT_ROOT}/src/klibc/kstring.c"
+	"${RT_ROOT}/src/klibc/rt_vsnprintf_tiny.c"
 	"${RT_ROOT}/src/kservice.c"
 	"${RT_ROOT}/src/object.c"
 	"${RT_ROOT}/src/scheduler_comm.c"

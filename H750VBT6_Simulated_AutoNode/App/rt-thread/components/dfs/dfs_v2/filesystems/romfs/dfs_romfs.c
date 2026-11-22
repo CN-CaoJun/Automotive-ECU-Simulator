@@ -64,6 +64,11 @@ int dfs_romfs_ioctl(struct dfs_file *file, int cmd, void *args)
     {
     case RT_FIOGETADDR:
         {
+            if (args == RT_NULL)
+            {
+                ret = -RT_EINVAL;
+                break;
+            }
             *(rt_ubase_t*)args = (rt_ubase_t)dirent->data;
             break;
         }
@@ -365,6 +370,7 @@ static const struct dfs_file_ops _rom_fops =
 {
     .open             = dfs_romfs_open,
     .close            = dfs_romfs_close,
+    .ioctl            = dfs_romfs_ioctl,
     .lseek            = generic_dfs_lseek,
     .read             = dfs_romfs_read,
     .getdents         = dfs_romfs_getdents,

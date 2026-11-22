@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2024 RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -49,11 +49,6 @@ extern "C" {
 int entry(void);
 #endif
 
-/**
- * @addtogroup KernelObject
- * @{
- */
-
 /*
  * kernel object interface
  */
@@ -75,6 +70,7 @@ rt_err_t rt_custom_object_destroy(rt_object_t obj);
 #endif /* RT_USING_HEAP */
 rt_bool_t rt_object_is_systemobject(rt_object_t object);
 rt_uint8_t rt_object_get_type(rt_object_t object);
+rt_err_t rt_object_for_each(rt_uint8_t type, rt_object_iter_t iter, void *data);
 rt_object_t rt_object_find(const char *name, rt_uint8_t type);
 rt_err_t rt_object_get_name(rt_object_t object, char *name, rt_uint8_t name_size);
 
@@ -86,10 +82,8 @@ void rt_object_take_sethook(void (*hook)(struct rt_object *object));
 void rt_object_put_sethook(void (*hook)(struct rt_object *object));
 #endif /* RT_USING_HOOK */
 
-/**@}*/
-
 /**
- * @addtogroup Clock
+ * @addtogroup group_clock_management
  * @{
  */
 
@@ -97,8 +91,10 @@ void rt_object_put_sethook(void (*hook)(struct rt_object *object));
  * clock & timer interface
  */
 rt_tick_t rt_tick_get(void);
+rt_tick_t rt_tick_get_delta(rt_tick_t base);
 void rt_tick_set(rt_tick_t tick);
 void rt_tick_increase(void);
+void rt_tick_increase_tick(rt_tick_t tick);
 rt_tick_t  rt_tick_from_millisecond(rt_int32_t ms);
 rt_tick_t rt_tick_get_millisecond(void);
 #ifdef RT_USING_HOOK
@@ -135,11 +131,6 @@ void rt_timer_exit_sethook(void (*hook)(struct rt_timer *timer));
 
 /**@}*/
 
-/**
- * @addtogroup Thread
- * @{
- */
-
 /*
  * thread interface
  */
@@ -161,6 +152,7 @@ rt_thread_t rt_thread_create(const char *name,
                              rt_uint32_t tick);
 rt_err_t rt_thread_delete(rt_thread_t thread);
 #endif /* RT_USING_HEAP */
+rt_err_t rt_thread_close(rt_thread_t thread);
 rt_thread_t rt_thread_self(void);
 rt_thread_t rt_thread_find(char *name);
 rt_err_t rt_thread_startup(rt_thread_t thread);
@@ -177,6 +169,9 @@ rt_err_t rt_thread_wakeup(rt_thread_t thread);
 void rt_thread_wakeup_set(struct rt_thread *thread, rt_wakeup_func_t func, void* user_data);
 #endif /* RT_USING_SMART */
 rt_err_t rt_thread_get_name(rt_thread_t thread, char *name, rt_uint8_t name_size);
+#ifdef RT_USING_CPU_USAGE_TRACER
+rt_uint8_t rt_thread_get_usage(rt_thread_t thread);
+#endif /* RT_USING_CPU_USAGE_TRACER */
 #ifdef RT_USING_SIGNALS
 void rt_thread_alloc_sig(rt_thread_t tid);
 void rt_thread_free_sig(rt_thread_t tid);
@@ -187,6 +182,8 @@ void rt_thread_suspend_sethook(void (*hook)(rt_thread_t thread));
 void rt_thread_resume_sethook (void (*hook)(rt_thread_t thread));
 
 /**
+ * @ingroup group_thread_management
+ *
  * @brief Sets a hook function when a thread is initialized.
  *
  * @param thread is the target thread that initializing
@@ -201,10 +198,27 @@ RT_OBJECT_HOOKLIST_DECLARE(rt_thread_inited_hookproto_t, rt_thread_inited);
  */
 void rt_thread_idle_init(void);
 #if defined(RT_USING_HOOK) || defined(RT_USING_IDLE_HOOK)
+// FIXME: Have to write doxygen comment here for rt_thread_idle_sethook
+//        but not in src/idle.c. Because the `rt_align(RT_ALIGN_SIZE)` in src/idle.c
+//        will make doxygen building failed.
+/**
+ * @ingroup group_thread_management
+ *
+ * @brief This function sets a hook function to idle thread loop. When the system performs
+ *        idle loop, this hook function should be invoked.
+ *
+ * @param hook the specified hook function.
+ *
+ * @return `RT_EOK`: set OK.
+ *         `-RT_EFULL`: hook list is full.
+ *
+ * @note the hook function must be simple and never be blocked or suspend.
+ */
 rt_err_t rt_thread_idle_sethook(void (*hook)(void));
 rt_err_t rt_thread_idle_delhook(void (*hook)(void));
 #endif /* defined(RT_USING_HOOK) || defined(RT_USING_IDLE_HOOK) */
 rt_thread_t rt_thread_idle_gethandler(void);
+rt_bool_t rt_thread_is_idle_thread(rt_thread_t thread);
 
 /*
  * schedule service
@@ -232,6 +246,7 @@ void rt_exit_critical_safe(rt_base_t critical_level);
 rt_uint16_t rt_critical_level(void);
 
 #ifdef RT_USING_HOOK
+void rt_scheduler_stack_overflow_sethook(rt_err_t (*hook)(struct rt_thread *thread));
 void rt_scheduler_sethook(void (*hook)(rt_thread_t from, rt_thread_t to));
 void rt_scheduler_switch_sethook(void (*hook)(struct rt_thread *tid));
 #endif /* RT_USING_HOOK */
@@ -241,15 +256,14 @@ void rt_secondary_cpu_entry(void);
 void rt_scheduler_ipi_handler(int vector, void *param);
 #endif /* RT_USING_SMP */
 
-/**@}*/
-
 /**
- * @addtogroup Signals
+ * @addtogroup group_signal
  * @{
  */
 #ifdef RT_USING_SIGNALS
 void rt_signal_mask(int signo);
 void rt_signal_unmask(int signo);
+void *rt_signal_check(void* context);
 rt_sighandler_t rt_signal_install(int signo, rt_sighandler_t handler);
 int rt_signal_wait(const rt_sigset_t *set, rt_siginfo_t *si, rt_int32_t timeout);
 int rt_system_signal_init(void);
@@ -257,7 +271,7 @@ int rt_system_signal_init(void);
 /**@}*/
 
 /**
- * @addtogroup MM
+ * @addtogroup group_memory_management
  * @{
  */
 
@@ -294,6 +308,7 @@ void rt_mp_free_sethook(void (*hook)(struct rt_mempool *mp, void *block));
  * heap memory interface
  */
 void rt_system_heap_init(void *begin_addr, void *end_addr);
+void rt_system_heap_init_generic(void *begin_addr, void *end_addr);
 
 void *rt_malloc(rt_size_t size);
 void rt_free(void *ptr);
@@ -311,12 +326,18 @@ void *rt_page_alloc(rt_size_t npages);
 void rt_page_free(void *addr, rt_size_t npages);
 #endif /* defined(RT_USING_SLAB) && defined(RT_USING_SLAB_AS_HEAP) */
 
+/**
+ * @ingroup group_hook
+ * @{
+ */
+
 #ifdef RT_USING_HOOK
 void rt_malloc_sethook(void (*hook)(void **ptr, rt_size_t size));
 void rt_realloc_set_entry_hook(void (*hook)(void **ptr, rt_size_t size));
 void rt_realloc_set_exit_hook(void (*hook)(void **ptr, rt_size_t size));
 void rt_free_sethook(void (*hook)(void **ptr));
 #endif /* RT_USING_HOOK */
+/**@}*/
 
 #endif /* RT_USING_HEAP */
 
@@ -376,7 +397,7 @@ void rt_slab_free(rt_slab_t m, void *ptr);
 /**@}*/
 
 /**
- * @addtogroup IPC
+ * @addtogroup group_thread_comm
  * @{
  */
 
@@ -400,6 +421,11 @@ rt_err_t rt_thread_suspend_to_list(rt_thread_t thread, rt_list_t *susp_list, int
 /* only for a suspended thread, and caller must hold the scheduler lock */
 rt_err_t rt_susp_list_enqueue(rt_list_t *susp_list, rt_thread_t thread, int ipc_flags);
 
+/**
+ * @addtogroup group_semaphore Semaphore
+ * @{
+ */
+
 #ifdef RT_USING_SEMAPHORE
 /*
  * semaphore interface
@@ -421,6 +447,13 @@ rt_err_t rt_sem_trytake(rt_sem_t sem);
 rt_err_t rt_sem_release(rt_sem_t sem);
 rt_err_t rt_sem_control(rt_sem_t sem, int cmd, void *arg);
 #endif /* RT_USING_SEMAPHORE */
+
+/**@}*/
+
+/**
+ * @addtogroup group_mutex Mutex
+ * @{
+ */
 
 #ifdef RT_USING_MUTEX
 /*
@@ -454,6 +487,13 @@ rt_inline rt_ubase_t rt_mutex_get_hold(rt_mutex_t mutex)
 
 #endif /* RT_USING_MUTEX */
 
+/**@}*/
+
+/**
+ * @addtogroup group_event Event
+ * @{
+ */
+
 #ifdef RT_USING_EVENT
 /*
  * event interface
@@ -483,6 +523,13 @@ rt_err_t rt_event_recv_killable(rt_event_t   event,
                        rt_uint32_t *recved);
 rt_err_t rt_event_control(rt_event_t event, int cmd, void *arg);
 #endif /* RT_USING_EVENT */
+
+/**@}*/
+
+/**
+ * @addtogroup group_mailbox MailBox
+ * @{
+ */
 
 #ifdef RT_USING_MAILBOX
 /*
@@ -518,6 +565,12 @@ rt_err_t rt_mb_recv_killable(rt_mailbox_t mb, rt_ubase_t *value, rt_int32_t time
 rt_err_t rt_mb_control(rt_mailbox_t mb, int cmd, void *arg);
 #endif /* RT_USING_MAILBOX */
 
+/**@}*/
+
+/**
+ * @addtogroup group_messagequeue Message Queue
+ * @{
+ */
 #ifdef RT_USING_MESSAGEQUEUE
 
 struct rt_mq_message
@@ -596,57 +649,30 @@ rt_ssize_t rt_mq_recv_prio(rt_mq_t mq,
 #endif /* RT_USING_MESSAGEQUEUE_PRIORITY */
 #endif /* RT_USING_MESSAGEQUEUE */
 
+/**@}*/
+
 /* defunct */
+void rt_thread_defunct_init(void);
 void rt_thread_defunct_enqueue(rt_thread_t thread);
 rt_thread_t rt_thread_defunct_dequeue(void);
+void rt_defunct_execute(void);
 
 /*
  * spinlock
  */
 struct rt_spinlock;
-#ifdef RT_USING_SMP
 
 void rt_spin_lock_init(struct rt_spinlock *lock);
 void rt_spin_lock(struct rt_spinlock *lock);
 void rt_spin_unlock(struct rt_spinlock *lock);
 rt_base_t rt_spin_lock_irqsave(struct rt_spinlock *lock);
 void rt_spin_unlock_irqrestore(struct rt_spinlock *lock, rt_base_t level);
-#else
-
-rt_inline void rt_spin_lock_init(struct rt_spinlock *lock)
-{
-    RT_UNUSED(lock);
-}
-rt_inline void rt_spin_lock(struct rt_spinlock *lock)
-{
-    RT_UNUSED(lock);
-    rt_enter_critical();
-}
-rt_inline void rt_spin_unlock(struct rt_spinlock *lock)
-{
-    RT_UNUSED(lock);
-    rt_exit_critical();
-}
-rt_inline rt_base_t rt_spin_lock_irqsave(struct rt_spinlock *lock)
-{
-    rt_base_t level;
-    RT_UNUSED(lock);
-    level = rt_hw_interrupt_disable();
-    return level;
-}
-rt_inline void rt_spin_unlock_irqrestore(struct rt_spinlock *lock, rt_base_t level)
-{
-    RT_UNUSED(lock);
-    rt_hw_interrupt_enable(level);
-}
-
-#endif /* RT_USING_SMP */
 
 /**@}*/
 
 #ifdef RT_USING_DEVICE
 /**
- * @addtogroup Device
+ * @addtogroup group_device_driver
  * @{
  */
 
@@ -698,6 +724,16 @@ rt_err_t  rt_device_control(rt_device_t dev, int cmd, void *arg);
 void rt_interrupt_enter(void);
 void rt_interrupt_leave(void);
 
+void rt_interrupt_context_push(rt_interrupt_context_t this_ctx);
+void rt_interrupt_context_pop(void);
+void *rt_interrupt_context_get(void);
+
+/**
+ * CPU object
+ */
+struct rt_cpu *rt_cpu_self(void);
+struct rt_cpu *rt_cpu_index(int index);
+
 #ifdef RT_USING_SMP
 
 /*
@@ -706,11 +742,16 @@ void rt_interrupt_leave(void);
 
 rt_base_t rt_cpus_lock(void);
 void rt_cpus_unlock(rt_base_t level);
-
-struct rt_cpu *rt_cpu_self(void);
-struct rt_cpu *rt_cpu_index(int index);
-
 void rt_cpus_lock_status_restore(struct rt_thread *thread);
+
+#ifdef RT_USING_DEBUG
+    rt_base_t rt_cpu_get_id(void);
+#else /* !RT_USING_DEBUG */
+    #define rt_cpu_get_id rt_hw_cpu_id
+#endif /* RT_USING_DEBUG */
+
+#else /* !RT_USING_SMP */
+#define rt_cpu_get_id()  (0)
 
 #endif /* RT_USING_SMP */
 
@@ -730,7 +771,7 @@ void rt_components_board_init(void);
 #endif /* RT_USING_COMPONENTS_INIT */
 
 /**
- * @addtogroup KernelService
+ * @addtogroup group_kernel_service
  * @{
  */
 
@@ -743,11 +784,21 @@ void rt_components_board_init(void);
 #else
 int rt_kprintf(const char *fmt, ...);
 void rt_kputs(const char *str);
+#ifdef RT_USING_CONSOLE_OUTPUT_CTL
+void rt_console_output_set_enabled(rt_bool_t enabled);
+rt_bool_t rt_console_output_get_enabled(void);
+#else
+#define rt_console_output_set_enabled(enabled) ((void)0)
+#define rt_console_output_get_enabled()        (RT_TRUE)
+#endif /* RT_USING_CONSOLE_OUTPUT_CTL */
 #endif /* RT_USING_CONSOLE */
 
 rt_err_t rt_backtrace(void);
 rt_err_t rt_backtrace_thread(rt_thread_t thread);
-rt_err_t rt_backtrace_frame(struct rt_hw_backtrace_frame *frame);
+rt_err_t rt_backtrace_frame(rt_thread_t thread, struct rt_hw_backtrace_frame *frame);
+rt_err_t rt_backtrace_formatted_print(rt_ubase_t *buffer, long buflen);
+rt_err_t rt_backtrace_to_buffer(rt_thread_t thread, struct rt_hw_backtrace_frame *frame,
+                                long skip, rt_ubase_t *buffer, long buflen);
 
 #if defined(RT_USING_DEVICE) && defined(RT_USING_CONSOLE)
 rt_device_t rt_console_set_device(const char *name);
@@ -759,21 +810,14 @@ rt_device_t rt_console_get_device(void);
 #endif /* RT_USING_THREADSAFE_PRINTF */
 #endif /* defined(RT_USING_DEVICE) && defined(RT_USING_CONSOLE) */
 
-rt_err_t rt_get_errno(void);
-void rt_set_errno(rt_err_t no);
-int *_rt_errno(void);
-const char *rt_strerror(rt_err_t error);
-#if !defined(RT_USING_NEWLIBC) && !defined(_WIN32)
-#ifndef errno
-#define errno    *_rt_errno()
-#endif
-#endif /* !defined(RT_USING_NEWLIBC) && !defined(_WIN32) */
-
+int __rt_fls(int val);
 int __rt_ffs(int value);
+unsigned long __rt_ffsl(unsigned long value);
+unsigned long __rt_clz(unsigned long value);
 
 void rt_show_version(void);
 
-#ifdef RT_USING_DEBUG
+#ifdef RT_DEBUGING_ASSERT
 extern void (*rt_assert_hook)(const char *ex, const char *func, rt_size_t line);
 void rt_assert_set_hook(void (*hook)(const char *ex, const char *func, rt_size_t line));
 void rt_assert_handler(const char *ex, const char *func, rt_size_t line);
@@ -784,8 +828,8 @@ if (!(EX))                                                                    \
     rt_assert_handler(#EX, __FUNCTION__, __LINE__);                           \
 }
 #else
-#define RT_ASSERT(EX)
-#endif /* RT_USING_DEBUG */
+#define RT_ASSERT(EX) {RT_UNUSED(EX);}
+#endif /* RT_DEBUGING_ASSERT */
 
 #ifdef RT_DEBUGING_CONTEXT
 /* Macro to check current context */
@@ -817,18 +861,37 @@ do                                                                            \
 }                                                                             \
 while (0)
 
+#if defined(RT_USING_SMP)
+/**
+ * @brief Check whether disabled interrupts make scheduler unavailable.
+ *
+ * In SMP builds, some kernel-internal lockless wait paths may disable local
+ * interrupts while still using scheduler-related operations legally. Keep this
+ * IRQ-disabled context assertion for UP builds only.
+ */
+#define RT_DEBUG_SCHEDULER_IRQ_DISABLED() (RT_FALSE)
+#else
+/**
+ * @brief Check whether disabled interrupts make scheduler unavailable.
+ *
+ * In UP builds, globally disabled interrupts prevent normal scheduling and
+ * timeout progress, so blocking scheduler paths must reject this context.
+ */
+#define RT_DEBUG_SCHEDULER_IRQ_DISABLED() rt_hw_interrupt_is_disabled()
+#endif /* defined(RT_USING_SMP) */
+
 /* "scheduler available" means:
  *     1) the scheduler has been started.
  *     2) not in interrupt context.
  *     3) scheduler is not locked.
- *     4) interrupt is not disabled.
+ *     4) interrupts are not disabled on UP.
  */
 #define RT_DEBUG_SCHEDULER_AVAILABLE(need_check)                              \
 do                                                                            \
 {                                                                             \
     if (need_check)                                                           \
     {                                                                         \
-        if (rt_critical_level() != 0)                                         \
+        if ((rt_critical_level() != 0) || RT_DEBUG_SCHEDULER_IRQ_DISABLED())  \
         {                                                                     \
             rt_kprintf("Function[%s]: scheduler is not available\n",          \
                     __FUNCTION__);                                            \
@@ -849,10 +912,26 @@ rt_inline rt_bool_t rt_in_thread_context(void)
     return rt_thread_self() != RT_NULL && rt_interrupt_get_nest() == 0;
 }
 
+/* is scheduler available */
 rt_inline rt_bool_t rt_scheduler_is_available(void)
 {
-    return !rt_hw_interrupt_is_disabled() && rt_critical_level() == 0 && rt_in_thread_context();
+    return rt_critical_level() == 0 && rt_in_thread_context();
 }
+
+#ifdef RT_USING_SMP
+/* is thread bond on core */
+rt_inline rt_bool_t rt_sched_thread_is_binding(rt_thread_t thread)
+{
+    if (thread == RT_NULL)
+    {
+        thread = rt_thread_self();
+    }
+    return !thread || RT_SCHED_CTX(thread).bind_cpu != RT_CPUS_NR;
+}
+
+#else
+#define rt_sched_thread_is_binding(thread) (RT_TRUE)
+#endif
 
 /**@}*/
 

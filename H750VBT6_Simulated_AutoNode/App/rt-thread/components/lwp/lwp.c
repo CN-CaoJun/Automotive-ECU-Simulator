@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2025 RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -17,7 +17,7 @@
  */
 
 #define DBG_TAG "lwp"
-#define DBG_LVL DBG_WARNING
+#define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
 #include <rthw.h>
@@ -56,35 +56,22 @@
 #define O_BINARY 0x10000
 #endif
 
-
-static const char elf_magic[] = {0x7f, 'E', 'L', 'F'};
 #ifdef DFS_USING_WORKDIR
 extern char working_directory[];
 #endif
 
 /**
- * @brief The default console is only a backup device with lowest priority.
- *        It's always recommended to scratch the console from the boot arguments.
- *        And dont forget to register the device with a higher priority.
+ * @brief Initializes the LWP (Light-Weight Process) component
+ *
+ * @return int Returns RT_EOK if all initializations succeed, otherwise returns
+ *         the error code from the first failed initialization
+ *
+ * @note This function performs initialization of various LWP subsystems in sequence:
+ *       1. Thread ID (TID) initialization
+ *       2. Process ID (PID) initialization
+ *       3. Channel component initialization
+ *       4. Futex (Fast Userspace Mutex) initialization
  */
-static rt_err_t lwp_default_console_setup(void)
-{
-    rt_device_t bakdev = rt_device_find("ttyS0");
-    rt_err_t rc;
-
-    if (bakdev)
-    {
-        lwp_console_register_backend(bakdev, LWP_CONSOLE_LOWEST_PRIOR);
-        rc = RT_EOK;
-    }
-    else
-    {
-        rc = -RT_EINVAL;
-    }
-
-    return rc;
-}
-
 static int lwp_component_init(void)
 {
     int rc;
@@ -104,95 +91,19 @@ static int lwp_component_init(void)
     {
         LOG_E("%s: lwp_futex_init() failed", __func__);
     }
-    else if ((rc = lwp_default_console_setup()) != RT_EOK)
-    {
-        LOG_E("%s: lwp_default_console_setup() failed", __func__);
-    }
     return rc;
 }
 INIT_COMPONENT_EXPORT(lwp_component_init);
 
-rt_weak int lwp_startup_debug_request(void)
-{
-    return 0;
-}
-
-#define LATENCY_TIMES (3)
-#define LATENCY_IN_MSEC (128)
-#define LWP_CONSOLE_PATH "CONSOLE=/dev/console"
-const char *init_search_path[] = {
-    "/sbin/init",
-    "/bin/init",
-};
-
 /**
- * Startup process 0 and do the essential works
- * This is the "Hello World" point of RT-Smart
+ * @brief Sets the current working directory for the calling LWP or system
+ *
+ * @param[in] buf Pointer to the path string to set as working directory
+ *
+ * @note This function handles both LWP-specific and system-wide working directories:
+ * - For LWPs, sets the working_directory in the LWP structure
+ * - For non-LWP threads, sets the global working_directory variable
  */
-static int lwp_startup(void)
-{
-    int error;
-
-    const char *init_path;
-    char *argv[] = {0, "&"};
-    char *envp[] = {LWP_CONSOLE_PATH, 0};
-
-#ifdef LWP_DEBUG_INIT
-    int command;
-    int countdown = LATENCY_TIMES;
-    while (countdown)
-    {
-        command = lwp_startup_debug_request();
-        if (command)
-        {
-            return 0;
-        }
-        rt_kprintf("Press any key to stop init process startup ... %d\n", countdown);
-        countdown -= 1;
-        rt_thread_mdelay(LATENCY_IN_MSEC);
-    }
-    rt_kprintf("Starting init ...\n");
-#endif /* LWP_DEBUG_INIT */
-
-    for (size_t i = 0; i < sizeof(init_search_path)/sizeof(init_search_path[0]); i++)
-    {
-        struct stat s;
-        init_path = init_search_path[i];
-        error = stat(init_path, &s);
-        if (error == 0)
-        {
-            argv[0] = (void *)init_path;
-            error = lwp_execve((void *)init_path, 0, sizeof(argv)/sizeof(argv[0]), argv, envp);
-            if (error < 0)
-            {
-                LOG_E("%s: failed to startup process 0 (init)\n"
-                    "Switching to legacy mode...", __func__);
-            }
-            else if (error != 1)
-            {
-                LOG_E("%s: pid 1 is already allocated", __func__);
-                error = -EBUSY;
-            }
-            else
-            {
-                rt_lwp_t p = lwp_from_pid_locked(1);
-                p->sig_protected = 1;
-
-                error = 0;
-            }
-            break;
-        }
-    }
-
-    if (error)
-    {
-        LOG_D("%s: init program not found\n"
-            "Switching to legacy mode...", __func__);
-    }
-    return error;
-}
-INIT_APP_EXPORT(lwp_startup);
-
 void lwp_setcwd(char *buf)
 {
     struct rt_lwp *lwp = RT_NULL;
@@ -216,6 +127,15 @@ void lwp_setcwd(char *buf)
     return ;
 }
 
+/**
+ * @brief Get the current working directory for the light-weight process
+ *
+ * @return char* Pointer to the current working directory string
+ *
+ * @note The function returns either:
+ *          - LWP's working directory (if valid and absolute path)
+ *          - System default working directory (if no LWP or invalid path)
+ */
 char *lwp_getcwd(void)
 {
     char *dir_buf = RT_NULL;
@@ -245,13 +165,28 @@ char *lwp_getcwd(void)
 }
 
 /**
- * RT-Thread light-weight process
+ * @brief Set the kernel stack pointer for the current thread
+ *
+ * @param[in] sp Pointer to the new kernel stack location
+ *
+ * @note It's typically used during context switching or thread initialization.
  */
 void lwp_set_kernel_sp(uint32_t *sp)
 {
     rt_thread_self()->kernel_sp = (rt_uint32_t *)sp;
 }
 
+/**
+ * @brief Get the kernel stack pointer for the current thread
+ *
+ * @return uint32_t* Pointer to the kernel stack
+ *
+ * @note Architecture-specific behavior:
+ * 1. With MMU: Simply returns the current thread's stack pointer
+ * 2. Without MMU: Checks interrupt context and returns either:
+ *    - Interrupted thread's kernel_sp (if in interrupt)
+ *    - Current thread's kernel_sp (if not in interrupt)
+ */
 uint32_t *lwp_get_kernel_sp(void)
 {
 #ifdef ARCH_MM_MMU
@@ -272,895 +207,15 @@ uint32_t *lwp_get_kernel_sp(void)
 #endif
 }
 
-#ifdef ARCH_MM_MMU
-struct process_aux *lwp_argscopy(struct rt_lwp *lwp, int argc, char **argv, char **envp)
-{
-    int size = sizeof(size_t) * 5; /* store argc, argv, envp, aux, NULL */
-    int *args;
-    char *str;
-    char *str_k;
-    char **new_argve;
-    int i;
-    int len;
-    size_t *args_k;
-    struct process_aux *aux;
-    size_t prot = PROT_READ | PROT_WRITE;
-    size_t flags = MAP_FIXED | MAP_PRIVATE;
-    size_t zero = 0;
-
-    for (i = 0; i < argc; i++)
-    {
-        size += (rt_strlen(argv[i]) + 1);
-    }
-    size += (sizeof(size_t) * argc);
-
-    i = 0;
-    if (envp)
-    {
-        while (envp[i] != 0)
-        {
-            size += (rt_strlen(envp[i]) + 1);
-            size += sizeof(size_t);
-            i++;
-        }
-    }
-
-    /* for aux */
-    size += sizeof(struct process_aux);
-
-    if (size > ARCH_PAGE_SIZE)
-    {
-        return RT_NULL;
-    }
-
-    args = lwp_mmap2(lwp, (void *)(USER_STACK_VEND), size, prot, flags, -1, 0);
-    if (args == RT_NULL || lwp_data_put(lwp, args, &zero, sizeof(zero)) != sizeof(zero))
-    {
-        return RT_NULL;
-    }
-
-    args_k = (size_t *)lwp_v2p(lwp, args);
-    args_k = (size_t *)((size_t)args_k - PV_OFFSET);
-
-    /* argc, argv[], 0, envp[], 0 , aux[] */
-    str = (char *)((size_t)args + (argc + 2 + i + 1 + AUX_ARRAY_ITEMS_NR * 2 + 1) * sizeof(size_t));
-    str_k = (char *)((size_t)args_k + (argc + 2 + i + 1 + AUX_ARRAY_ITEMS_NR * 2 + 1) * sizeof(size_t));
-
-    new_argve = (char **)&args_k[1];
-    args_k[0] = argc;
-
-    for (i = 0; i < argc; i++)
-    {
-        len = rt_strlen(argv[i]) + 1;
-        new_argve[i] = str;
-        lwp_memcpy(str_k, argv[i], len);
-        str += len;
-        str_k += len;
-    }
-    new_argve[i] = 0;
-    i++;
-
-    new_argve[i] = 0;
-    if (envp)
-    {
-        int j;
-
-        for (j = 0; envp[j] != 0; j++)
-        {
-            len = rt_strlen(envp[j]) + 1;
-            new_argve[i] = str;
-            lwp_memcpy(str_k, envp[j], len);
-            str += len;
-            str_k += len;
-            i++;
-        }
-        new_argve[i] = 0;
-    }
-    i++;
-
-    /* aux */
-    aux = (struct process_aux *)(new_argve + i);
-    aux->item[0].key = AT_EXECFN;
-    aux->item[0].value = (size_t)(size_t)new_argve[0];
-    i += AUX_ARRAY_ITEMS_NR * 2;
-    new_argve[i] = 0;
-
-    rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, args_k, size);
-
-    lwp->args = args;
-
-    return aux;
-}
-#else
-static struct process_aux *lwp_argscopy(struct rt_lwp *lwp, int argc, char **argv, char **envp)
-{
-#ifdef ARCH_MM_MMU
-    int size = sizeof(int) * 5; /* store argc, argv, envp, aux, NULL */
-    struct process_aux *aux;
-#else
-    int size = sizeof(int) * 4; /* store argc, argv, envp, NULL */
-#endif /* ARCH_MM_MMU */
-    int *args;
-    char *str;
-    char **new_argve;
-    int i;
-    int len;
-
-    for (i = 0; i < argc; i++)
-    {
-        size += (rt_strlen(argv[i]) + 1);
-    }
-    size += (sizeof(int) * argc);
-
-    i = 0;
-    if (envp)
-    {
-        while (envp[i] != 0)
-        {
-            size += (rt_strlen(envp[i]) + 1);
-            size += sizeof(int);
-            i++;
-        }
-    }
-
-#ifdef ARCH_MM_MMU
-    /* for aux */
-    size += sizeof(struct process_aux);
-
-    args = (int *)rt_malloc(size);
-    if (args == RT_NULL)
-    {
-        return RT_NULL;
-    }
-
-    /* argc, argv[], 0, envp[], 0 */
-    str = (char *)((size_t)args + (argc + 2 + i + 1 + AUX_ARRAY_ITEMS_NR * 2 + 1) * sizeof(int));
-#else
-    args = (int *)rt_malloc(size);
-    if (args == RT_NULL)
-    {
-        return RT_NULL;
-    }
-    str = (char*)((int)args + (argc + 2 + i + 1) * sizeof(int));
-#endif /* ARCH_MM_MMU */
-
-    new_argve = (char **)&args[1];
-    args[0] = argc;
-
-    for (i = 0; i < argc; i++)
-    {
-        len = rt_strlen(argv[i]) + 1;
-        new_argve[i] = str;
-        lwp_memcpy(str, argv[i], len);
-        str += len;
-    }
-    new_argve[i] = 0;
-    i++;
-
-    new_argve[i] = 0;
-    if (envp)
-    {
-        int j;
-        for (j = 0; envp[j] != 0; j++)
-        {
-            len = rt_strlen(envp[j]) + 1;
-            new_argve[i] = str;
-            lwp_memcpy(str, envp[j], len);
-            str += len;
-            i++;
-        }
-        new_argve[i] = 0;
-    }
-#ifdef ARCH_MM_MMU
-    /* aux */
-    aux = (struct process_aux *)(new_argve + i);
-    aux->item[0].key = AT_EXECFN;
-    aux->item[0].value = (uint32_t)(size_t)new_argve[0];
-    i += AUX_ARRAY_ITEMS_NR * 2;
-    new_argve[i] = 0;
-
-    lwp->args = args;
-
-    return aux;
-#else
-    lwp->args = args;
-    lwp->args_length = size;
-
-    return (struct process_aux *)(new_argve + i);
-#endif /* ARCH_MM_MMU */
-}
-#endif
-
-#ifdef ARCH_MM_MMU
-#define check_off(voff, vlen)           \
-    do                                  \
-    {                                   \
-        if (voff > vlen)                \
-        {                               \
-            result = -RT_ERROR;         \
-            goto _exit;                 \
-        }                               \
-    } while (0)
-
-#define check_read(vrlen, vrlen_want)   \
-    do                                  \
-    {                                   \
-        if (vrlen < vrlen_want)         \
-        {                               \
-            result = -RT_ERROR;         \
-            goto _exit;                 \
-        }                               \
-    } while (0)
-
-static size_t load_fread(void *ptr, size_t size, size_t nmemb, int fd)
-{
-    size_t read_block = 0;
-
-    while (nmemb)
-    {
-        size_t count;
-
-        count = read(fd, ptr, size * nmemb) / size;
-        if (count < nmemb)
-        {
-            LOG_E("ERROR: file size error!");
-            break;
-        }
-
-        ptr = (void *)((uint8_t *)ptr + (count * size));
-        nmemb -= count;
-        read_block += count;
-    }
-
-    return read_block;
-}
-
-typedef struct
-{
-    Elf_Word st_name;
-    Elf_Addr st_value;
-    Elf_Word st_size;
-    unsigned char st_info;
-    unsigned char st_other;
-    Elf_Half st_shndx;
-} Elf_sym;
-
-#ifdef ARCH_MM_MMU
-struct map_range
-{
-    void *start;
-    size_t size;
-};
-
-static void expand_map_range(struct map_range *m, void *start, size_t size)
-{
-    if (!m->start)
-    {
-        m->start = start;
-        m->size = size;
-    }
-    else
-    {
-        void *end = (void *)((char*)start + size);
-        void *mend = (void *)((char*)m->start + m->size);
-
-        if (m->start > start)
-        {
-            m->start = start;
-        }
-        if (mend < end)
-        {
-            mend = end;
-        }
-        m->size = (char *)mend - (char *)m->start;
-    }
-}
-
-static int map_range_ckeck(struct map_range *m1, struct map_range *m2)
-{
-    void *m1_start = (void *)((size_t)m1->start & ~ARCH_PAGE_MASK);
-    void *m1_end = (void *)((((size_t)m1->start + m1->size) + ARCH_PAGE_MASK) & ~ARCH_PAGE_MASK);
-    void *m2_start = (void *)((size_t)m2->start & ~ARCH_PAGE_MASK);
-    void *m2_end = (void *)((((size_t)m2->start + m2->size) + ARCH_PAGE_MASK) & ~ARCH_PAGE_MASK);
-
-    if (m1->size)
-    {
-        if (m1_start < (void *)USER_LOAD_VADDR)
-        {
-            return -1;
-        }
-        if (m1_start > (void *)USER_STACK_VSTART)
-        {
-            return -1;
-        }
-        if (m1_end < (void *)USER_LOAD_VADDR)
-        {
-            return -1;
-        }
-        if (m1_end > (void *)USER_STACK_VSTART)
-        {
-            return -1;
-        }
-    }
-    if (m2->size)
-    {
-        if (m2_start < (void *)USER_LOAD_VADDR)
-        {
-            return -1;
-        }
-        if (m2_start > (void *)USER_STACK_VSTART)
-        {
-            return -1;
-        }
-        if (m2_end < (void *)USER_LOAD_VADDR)
-        {
-            return -1;
-        }
-        if (m2_end > (void *)USER_STACK_VSTART)
-        {
-            return -1;
-        }
-    }
-
-    if ((m1->size != 0) && (m2->size != 0))
-    {
-        if (m1_start < m2_start)
-        {
-            if (m1_end > m2_start)
-            {
-                return -1;
-            }
-        }
-        else /* m2_start <= m1_start */
-        {
-            if (m2_end > m1_start)
-            {
-                return -1;
-            }
-        }
-    }
-    return 0;
-}
-#endif
-
-static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, struct process_aux *aux)
-{
-    uint32_t i;
-    uint32_t off = 0;
-    size_t load_off = 0;
-    char *p_section_str = 0;
-    Elf_sym *dynsym = 0;
-    Elf_Ehdr eheader;
-    Elf_Phdr pheader;
-    Elf_Shdr sheader;
-    int result = RT_EOK;
-    uint32_t magic;
-    size_t read_len;
-    void *got_start = 0;
-    size_t got_size = 0;
-    void *rel_dyn_start = 0;
-    size_t rel_dyn_size = 0;
-    size_t dynsym_off = 0;
-    size_t dynsym_size = 0;
-#ifdef ARCH_MM_MMU
-    struct map_range user_area[2] = {{NULL, 0}, {NULL, 0}}; /* 0 is text, 1 is data */
-    void *pa, *va;
-    void *va_self;
-
-#endif
-
-    if (len < sizeof eheader)
-    {
-        LOG_E("len < sizeof eheader!");
-        return -RT_ERROR;
-    }
-
-    lseek(fd, 0, SEEK_SET);
-    read_len = load_fread(&magic, 1, sizeof magic, fd);
-    check_read(read_len, sizeof magic);
-
-    if (memcmp(elf_magic, &magic, 4) != 0)
-    {
-        LOG_E("elf_magic not same, magic:0x%x!", magic);
-        return -RT_ERROR;
-    }
-
-    lseek(fd, off, SEEK_SET);
-    read_len = load_fread(&eheader, 1, sizeof eheader, fd);
-    check_read(read_len, sizeof eheader);
-
-#ifndef ARCH_CPU_64BIT
-    if (eheader.e_ident[4] != 1)
-    { /* not 32bit */
-        LOG_E("elf not 32bit, %d!", eheader.e_ident[4]);
-        return -RT_ERROR;
-    }
-#else
-    if (eheader.e_ident[4] != 2)
-    { /* not 64bit */
-        LOG_E("elf not 64bit, %d!", eheader.e_ident[4]);
-        return -RT_ERROR;
-    }
-#endif
-
-    if (eheader.e_ident[6] != 1)
-    { /* ver not 1 */
-        LOG_E("elf Version not 1,ver:%d!", eheader.e_ident[6]);
-        return -RT_ERROR;
-    }
-
-    if ((eheader.e_type != ET_DYN)
-#ifdef ARCH_MM_MMU
-        && (eheader.e_type != ET_EXEC)
-#endif
-    )
-    {
-        /* not pie or exec elf */
-        LOG_E("elf type not pie or exec, type:%d!", eheader.e_type);
-        return -RT_ERROR;
-    }
-
-#ifdef ARCH_MM_MMU
-    {
-        off = eheader.e_phoff;
-        for (i = 0; i < eheader.e_phnum; i++, off += sizeof pheader)
-        {
-            check_off(off, len);
-            lseek(fd, off, SEEK_SET);
-            read_len = load_fread(&pheader, 1, sizeof pheader, fd);
-            check_read(read_len, sizeof pheader);
-
-            if (pheader.p_type == PT_DYNAMIC)
-            {
-                /* load ld.so */
-                return 1; /* 1 means dynamic */
-            }
-        }
-    }
-#endif
-
-    if (eheader.e_entry != 0)
-    {
-        if ((eheader.e_entry != USER_LOAD_VADDR)
-                && (eheader.e_entry != LDSO_LOAD_VADDR))
-        {
-            /* the entry is invalidate */
-            LOG_E("elf entry is invalidate, entry:0x%x!", eheader.e_entry);
-            return -RT_ERROR;
-        }
-    }
-
-    { /* load aux */
-        uint8_t *process_header;
-        size_t process_header_size;
-
-        off = eheader.e_phoff;
-        process_header_size = eheader.e_phnum * sizeof pheader;
-#ifdef ARCH_MM_MMU
-        if (process_header_size > ARCH_PAGE_SIZE - sizeof(char[16]))
-        {
-            LOG_E("process_header_size too big, size:0x%x!", process_header_size);
-            return -RT_ERROR;
-        }
-        va = (uint8_t *)lwp_map_user(lwp, (void *)(USER_VADDR_TOP - ARCH_PAGE_SIZE * 2), process_header_size, 0);
-        if (!va)
-        {
-            LOG_E("lwp map user failed!");
-            return -RT_ERROR;
-        }
-        pa = lwp_v2p(lwp, va);
-        process_header = (uint8_t *)pa - PV_OFFSET;
-#else
-        process_header = (uint8_t *)rt_malloc(process_header_size + sizeof(char[16]));
-        if (!process_header)
-        {
-            LOG_E("process_header malloc failed, size:0x%x!", process_header_size + sizeof(char[16]));
-            return -RT_ERROR;
-        }
-#endif
-        check_off(off, len);
-        lseek(fd, off, SEEK_SET);
-        read_len = load_fread(process_header, 1, process_header_size, fd);
-        check_read(read_len, process_header_size);
-#ifdef ARCH_MM_MMU
-        rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, process_header, process_header_size);
-#endif
-
-        aux->item[1].key = AT_PAGESZ;
-#ifdef ARCH_MM_MMU
-        aux->item[1].value = ARCH_PAGE_SIZE;
-#else
-        aux->item[1].value = RT_MM_PAGE_SIZE;
-#endif
-        aux->item[2].key = AT_RANDOM;
-        {
-            uint32_t random_value = rt_tick_get();
-            uint8_t *random;
-#ifdef ARCH_MM_MMU
-            uint8_t *krandom;
-
-            random = (uint8_t *)(USER_VADDR_TOP - ARCH_PAGE_SIZE - sizeof(char[16]));
-
-            krandom = (uint8_t *)lwp_v2p(lwp, random);
-            krandom = (uint8_t *)krandom - PV_OFFSET;
-            rt_memcpy(krandom, &random_value, sizeof random_value);
-#else
-            random = (uint8_t *)(process_header + process_header_size);
-            rt_memcpy(random, &random_value, sizeof random_value);
-#endif
-            aux->item[2].value = (size_t)random;
-        }
-        aux->item[3].key = AT_PHDR;
-#ifdef ARCH_MM_MMU
-        aux->item[3].value = (size_t)va;
-#else
-        aux->item[3].value = (size_t)process_header;
-#endif
-        aux->item[4].key = AT_PHNUM;
-        aux->item[4].value = eheader.e_phnum;
-        aux->item[5].key = AT_PHENT;
-        aux->item[5].value = sizeof pheader;
-#ifdef ARCH_MM_MMU
-        rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, aux, sizeof *aux);
-#endif
-    }
-
-    if (load_addr)
-    {
-        load_off = (size_t)load_addr;
-    }
-#ifdef ARCH_MM_MMU
-    else
-    {
-        /* map user */
-        off = eheader.e_shoff;
-        for (i = 0; i < eheader.e_shnum; i++, off += sizeof sheader)
-        {
-            check_off(off, len);
-            lseek(fd, off, SEEK_SET);
-            read_len = load_fread(&sheader, 1, sizeof sheader, fd);
-            check_read(read_len, sizeof sheader);
-
-            if ((sheader.sh_flags & SHF_ALLOC) == 0)
-            {
-                continue;
-            }
-
-            switch (sheader.sh_type)
-            {
-            case SHT_PROGBITS:
-                if ((sheader.sh_flags & SHF_WRITE) == 0)
-                {
-                    expand_map_range(&user_area[0], (void *)sheader.sh_addr, sheader.sh_size);
-                }
-                else
-                {
-                    expand_map_range(&user_area[1], (void *)sheader.sh_addr, sheader.sh_size);
-                }
-                break;
-            case SHT_NOBITS:
-                expand_map_range(&user_area[1], (void *)sheader.sh_addr, sheader.sh_size);
-                break;
-            default:
-                expand_map_range(&user_area[1], (void *)sheader.sh_addr, sheader.sh_size);
-                break;
-            }
-        }
-
-        if (user_area[0].size == 0)
-        {
-            /* no code */
-            result = -RT_ERROR;
-            goto _exit;
-        }
-
-        if (user_area[0].start == NULL)
-        {
-            /* DYN */
-            load_off = USER_LOAD_VADDR;
-            user_area[0].start = (void *)((char*)user_area[0].start + load_off);
-            user_area[1].start = (void *)((char*)user_area[1].start + load_off);
-        }
-
-        if (map_range_ckeck(&user_area[0], &user_area[1]) != 0)
-        {
-            result = -RT_ERROR;
-            goto _exit;
-        }
-
-        /* text and data */
-        for (i = 0; i < 2; i++)
-        {
-            if (user_area[i].size != 0)
-            {
-                va = lwp_map_user(lwp, user_area[i].start, user_area[i].size, (i == 0));
-                if (!va || (va != user_area[i].start))
-                {
-                    result = -RT_ERROR;
-                    goto _exit;
-                }
-            }
-        }
-        lwp->text_size = user_area[0].size;
-    }
-#else
-    else
-    {
-        size_t start = -1UL;
-        size_t end = 0UL;
-        size_t total_size;
-
-        off = eheader.e_shoff;
-        for (i = 0; i < eheader.e_shnum; i++, off += sizeof sheader)
-        {
-            check_off(off, len);
-            lseek(fd, off, SEEK_SET);
-            read_len = load_fread(&sheader, 1, sizeof sheader, fd);
-            check_read(read_len, sizeof sheader);
-
-            if ((sheader.sh_flags & SHF_ALLOC) == 0)
-            {
-                continue;
-            }
-
-            switch (sheader.sh_type)
-            {
-            case SHT_PROGBITS:
-            case SHT_NOBITS:
-                if (start > sheader.sh_addr)
-                {
-                    start = sheader.sh_addr;
-                }
-                if (sheader.sh_addr + sheader.sh_size > end)
-                {
-                    end = sheader.sh_addr + sheader.sh_size;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-
-        total_size = end - start;
-
-#ifdef RT_USING_CACHE
-        load_off = (size_t)rt_malloc_align(total_size, RT_CPU_CACHE_LINE_SZ);
-#else
-        load_off = (size_t)rt_malloc(total_size);
-#endif
-        if (load_off == 0)
-        {
-            LOG_E("alloc text memory faild!");
-            result = -RT_ENOMEM;
-            goto _exit;
-        }
-        else
-        {
-            LOG_D("lwp text malloc : %p, size: %d!", (void *)load_off, lwp->text_size);
-        }
-        lwp->load_off = load_off; /* for free */
-        lwp->text_size = total_size;
-    }
-#endif
-    lwp->text_entry = (void *)(eheader.e_entry + load_off);
-
-    off = eheader.e_phoff;
-    for (i = 0; i < eheader.e_phnum; i++, off += sizeof pheader)
-    {
-        check_off(off, len);
-        lseek(fd, off, SEEK_SET);
-        read_len = load_fread(&pheader, 1, sizeof pheader, fd);
-        check_read(read_len, sizeof pheader);
-
-        if (pheader.p_type == PT_LOAD)
-        {
-            if (pheader.p_filesz > pheader.p_memsz)
-            {
-                LOG_E("pheader.p_filesz > pheader.p_memsz, p_filesz:0x%x;p_memsz:0x%x!", pheader.p_filesz, pheader.p_memsz);
-                return -RT_ERROR;
-            }
-
-            check_off(pheader.p_offset, len);
-            lseek(fd, pheader.p_offset, SEEK_SET);
-#ifdef ARCH_MM_MMU
-            {
-                uint32_t size = pheader.p_filesz;
-                size_t tmp_len = 0;
-
-                va = (void *)(pheader.p_vaddr + load_addr);
-                read_len = 0;
-                while (size)
-                {
-                    pa = lwp_v2p(lwp, va);
-                    va_self = (void *)((char *)pa - PV_OFFSET);
-                    LOG_D("va_self = %p pa = %p", va_self, pa);
-                    tmp_len = (size < ARCH_PAGE_SIZE) ? size : ARCH_PAGE_SIZE;
-                    tmp_len = load_fread(va_self, 1, tmp_len, fd);
-                    rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, va_self, tmp_len);
-                    read_len += tmp_len;
-                    size -= tmp_len;
-                    va = (void *)((char *)va + ARCH_PAGE_SIZE);
-                }
-            }
-#else
-            read_len = load_fread((void*)(pheader.p_vaddr + load_off), 1, pheader.p_filesz, fd);
-#endif
-            check_read(read_len, pheader.p_filesz);
-
-            if (pheader.p_filesz < pheader.p_memsz)
-            {
-#ifdef ARCH_MM_MMU
-                uint32_t size = pheader.p_memsz - pheader.p_filesz;
-                uint32_t size_s;
-                uint32_t off;
-
-                off = pheader.p_filesz & ARCH_PAGE_MASK;
-                va = (void *)((pheader.p_vaddr + pheader.p_filesz + load_off) & ~ARCH_PAGE_MASK);
-                while (size)
-                {
-                    size_s = (size < ARCH_PAGE_SIZE - off) ? size : ARCH_PAGE_SIZE - off;
-                    pa = lwp_v2p(lwp, va);
-                    va_self = (void *)((char *)pa - PV_OFFSET);
-                    memset((void *)((char *)va_self + off), 0, size_s);
-                    rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, (void *)((char *)va_self + off), size_s);
-                    off = 0;
-                    size -= size_s;
-                    va = (void *)((char *)va + ARCH_PAGE_SIZE);
-                }
-#else
-                memset((uint8_t *)pheader.p_vaddr + pheader.p_filesz + load_off, 0, (size_t)(pheader.p_memsz - pheader.p_filesz));
-#endif
-            }
-        }
-    }
-
-    /* relocate */
-    if (eheader.e_type == ET_DYN)
-    {
-        /* section info */
-        off = eheader.e_shoff;
-        /* find section string table */
-        check_off(off, len);
-        lseek(fd, off + (sizeof sheader) * eheader.e_shstrndx, SEEK_SET);
-        read_len = load_fread(&sheader, 1, sizeof sheader, fd);
-        check_read(read_len, sizeof sheader);
-
-        p_section_str = (char *)rt_malloc(sheader.sh_size);
-        if (!p_section_str)
-        {
-            LOG_E("out of memory!");
-            result = -ENOMEM;
-            goto _exit;
-        }
-
-        check_off(sheader.sh_offset, len);
-        lseek(fd, sheader.sh_offset, SEEK_SET);
-        read_len = load_fread(p_section_str, 1, sheader.sh_size, fd);
-        check_read(read_len, sheader.sh_size);
-
-        check_off(off, len);
-        lseek(fd, off, SEEK_SET);
-        for (i = 0; i < eheader.e_shnum; i++, off += sizeof sheader)
-        {
-            read_len = load_fread(&sheader, 1, sizeof sheader, fd);
-            check_read(read_len, sizeof sheader);
-
-            if (strcmp(p_section_str + sheader.sh_name, ".got") == 0)
-            {
-                got_start = (void *)((uint8_t *)sheader.sh_addr + load_off);
-                got_size = (size_t)sheader.sh_size;
-            }
-            else if (strcmp(p_section_str + sheader.sh_name, ".rel.dyn") == 0)
-            {
-                rel_dyn_start = (void *)((uint8_t *)sheader.sh_addr + load_off);
-                rel_dyn_size = (size_t)sheader.sh_size;
-            }
-            else if (strcmp(p_section_str + sheader.sh_name, ".dynsym") == 0)
-            {
-                dynsym_off = (size_t)sheader.sh_offset;
-                dynsym_size = (size_t)sheader.sh_size;
-            }
-        }
-        /* reloc */
-        if (dynsym_size)
-        {
-            dynsym = rt_malloc(dynsym_size);
-            if (!dynsym)
-            {
-                LOG_E("ERROR: Malloc error!");
-                result = -ENOMEM;
-                goto _exit;
-            }
-            check_off(dynsym_off, len);
-            lseek(fd, dynsym_off, SEEK_SET);
-            read_len = load_fread(dynsym, 1, dynsym_size, fd);
-            check_read(read_len, dynsym_size);
-        }
-#ifdef ARCH_MM_MMU
-        arch_elf_reloc(lwp->aspace, (void *)load_off, rel_dyn_start, rel_dyn_size, got_start, got_size, dynsym);
-#else
-        arch_elf_reloc((void *)load_off, rel_dyn_start, rel_dyn_size, got_start, got_size, dynsym);
-
-        rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, lwp->text_entry, lwp->text_size);
-        rt_hw_cpu_icache_ops(RT_HW_CACHE_INVALIDATE, lwp->text_entry, lwp->text_size);
-#endif
-    }
-    LOG_D("lwp->text_entry = 0x%p", lwp->text_entry);
-    LOG_D("lwp->text_size  = 0x%p", lwp->text_size);
-
-_exit:
-    if (dynsym)
-    {
-        rt_free(dynsym);
-    }
-    if (p_section_str)
-    {
-        rt_free(p_section_str);
-    }
-    if (result != RT_EOK)
-    {
-        LOG_E("lwp load faild, %d", result);
-    }
-    return result;
-}
-#endif /* ARCH_MM_MMU */
-
-rt_weak int lwp_load(const char *filename, struct rt_lwp *lwp, uint8_t *load_addr, size_t addr_size, struct process_aux *aux)
-{
-    uint8_t *ptr;
-    int ret = -1;
-    int len;
-    int fd = -1;
-
-    /* check file name */
-    RT_ASSERT(filename != RT_NULL);
-    /* check lwp control block */
-    RT_ASSERT(lwp != RT_NULL);
-
-    /* copy file name to process name */
-    rt_strncpy(lwp->cmd, filename, RT_NAME_MAX);
-
-    if (load_addr != RT_NULL)
-    {
-        lwp->lwp_type = LWP_TYPE_FIX_ADDR;
-        ptr = load_addr;
-    }
-    else
-    {
-        lwp->lwp_type = LWP_TYPE_DYN_ADDR;
-        ptr = RT_NULL;
-    }
-
-    fd = open(filename, O_BINARY | O_RDONLY, 0);
-    if (fd < 0)
-    {
-        LOG_E("ERROR: Can't open elf file %s!", filename);
-        goto out;
-    }
-    len = lseek(fd, 0, SEEK_END);
-    if (len < 0)
-    {
-        LOG_E("ERROR: File %s size error!", filename);
-        goto out;
-    }
-
-    lseek(fd, 0, SEEK_SET);
-
-    ret = load_elf(fd, len, lwp, ptr, aux);
-    if ((ret != RT_EOK) && (ret != 1))
-    {
-        LOG_E("lwp load ret = %d", ret);
-    }
-
-out:
-    if (fd > 0)
-    {
-        close(fd);
-    }
-    return ret;
-}
-
-/* lwp-thread clean up routine */
+/**
+ * @brief Clean up resources associated with a light-weight process thread
+ *
+ * @param[in] tid Pointer to the thread control block to be cleaned up
+ *
+ * @note This function performs cleanup operations for a thread associated with a light-weight process (LWP).
+ *       It handles signal detachment and reference count decrement for the LWP structure.
+ *
+ */
 void lwp_cleanup(struct rt_thread *tid)
 {
     struct rt_lwp *lwp;
@@ -1188,6 +243,15 @@ void lwp_cleanup(struct rt_thread *tid)
     return;
 }
 
+/**
+ * @brief Set up standard I/O for a light-weight process
+ *
+ * @param[in] lwp Pointer to the light-weight process structure
+ *
+ * @note This function initializes the standard input, output, and error streams
+ *       for a light-weight process by opening the console device and associating
+ *       it with file descriptors 0, 1, and 2.
+ */
 static void lwp_execve_setup_stdio(struct rt_lwp *lwp)
 {
     struct dfs_fdtable *lwp_fdt;
@@ -1220,6 +284,14 @@ static void lwp_execve_setup_stdio(struct rt_lwp *lwp)
     return;
 }
 
+/**
+ * @brief Entry point for light-weight process threads
+ *
+ * @param[in] parameter Thread parameter (unused)
+ *
+ * @note This function is the main entry point for threads created within a light-weight process.
+ *       It handles thread initialization, debug mode setup, and transitions to user mode.
+ */
 static void _lwp_thread_entry(void *parameter)
 {
     rt_thread_t tid;
@@ -1259,6 +331,15 @@ static void _lwp_thread_entry(void *parameter)
 #endif /* ARCH_MM_MMU */
 }
 
+/**
+ * @brief Get the current light-weight process
+ *
+ * @return Pointer to the current light-weight process structure
+ *         RT_NULL if no process is associated with current thread
+ *
+ * @note This function retrieves the light-weight process associated with the
+ *       currently running thread.
+ */
 struct rt_lwp *lwp_self(void)
 {
     rt_thread_t tid;
@@ -1272,6 +353,17 @@ struct rt_lwp *lwp_self(void)
     return RT_NULL;
 }
 
+/**
+ * @brief Register a child process with its parent
+ *
+ * @param[in] parent Pointer to the parent process structure
+ * @param[in] child  Pointer to the child process structure to register
+ *
+ * @return RT_EOK on success
+ *
+ * @note This function adds a child process to its parent's children list and
+ *       increases reference counts for both processes.
+ */
 rt_err_t lwp_children_register(struct rt_lwp *parent, struct rt_lwp *child)
 {
     /* lwp add to children link */
@@ -1290,6 +382,17 @@ rt_err_t lwp_children_register(struct rt_lwp *parent, struct rt_lwp *child)
     return 0;
 }
 
+/**
+ * @brief Unregister a child process from its parent
+ *
+ * @param[in] parent Pointer to the parent process structure
+ * @param[in] child  Pointer to the child process structure to unregister
+ *
+ * @return RT_EOK on success
+ *
+ * @note This function removes a child process from its parent's children list and
+ *       decreases reference counts for both processes.
+ */
 rt_err_t lwp_children_unregister(struct rt_lwp *parent, struct rt_lwp *child)
 {
     struct rt_lwp **lwp_node;
@@ -1313,6 +416,75 @@ rt_err_t lwp_children_unregister(struct rt_lwp *parent, struct rt_lwp *child)
     return 0;
 }
 
+/**
+ * @brief Copy process arguments and environment variables from kernel space to user space.
+ *
+ * @param[in] lwp  Pointer to the light-weight process structure
+ * @param[in] argc Argument count
+ * @param[in] argv Argument vector
+ * @param[in] envp Environment variables
+ *
+ * @return Pointer to the process auxiliary structure on success
+ *         RT_NULL if memory allocation fails or arguments initialization fails
+ *
+ * @note This function performs the following operations:
+ *       1. Initializes argument information structure
+ *       2. Copies command line arguments to user space
+ *       3. Copies environment variables to user space
+ *       4. Returns the auxiliary structure containing copied data
+ */
+struct process_aux *argscopy(struct rt_lwp *lwp, int argc, char **argv, char **envp)
+{
+    struct lwp_args_info ai;
+    rt_err_t error;
+    struct process_aux *ua;
+    const char **tail_argv[2] = {0};
+
+    error = lwp_args_init(&ai);
+    if (error)
+    {
+        return RT_NULL;
+    }
+
+    if (argc > 0)
+    {
+        tail_argv[0] = (void *)argv[argc - 1];
+        argv[argc - 1] = NULL;
+        lwp_args_put(&ai, (void *)argv, LWP_ARGS_TYPE_KARG);
+        lwp_args_put(&ai, (void *)tail_argv, LWP_ARGS_TYPE_KARG);
+    }
+    lwp_args_put(&ai, (void *)envp, LWP_ARGS_TYPE_KENVP);
+
+    ua = lwp_argscopy(lwp, &ai);
+    lwp_args_detach(&ai);
+
+    return ua;
+}
+
+/**
+ * @brief Creates and starts a new LWP by loading and executing the specified executable file.
+ *
+ * @param[in] filename Path to the executable file
+ * @param[in] debug     Debug flag (non-zero to enable debugging)
+ * @param[in] argc      Argument count
+ * @param[in] argv      Argument vector
+ * @param[in] envp      Environment variables
+ *
+ * @return Process ID (PID) of the new LWP on success
+ *         -EINVAL if filename is NULL
+ *         -EACCES if file is not executable
+ *         -ENOMEM if memory allocation fails
+ *         -RT_ERROR on other failures
+ *
+ * @note This function performs the following operations:
+ *       1. Validates input parameters
+ *       2. Creates new LWP structure
+ *       3. Initializes user space (for MMU systems)
+ *       4. Copies arguments and environment
+ *       5. Loads the executable
+ *       6. Sets up standard I/O
+ *       7. Creates and starts the main thread
+ */
 pid_t lwp_execve(char *filename, int debug, int argc, char **argv, char **envp)
 {
     int result;
@@ -1335,41 +507,33 @@ pid_t lwp_execve(char *filename, int debug, int argc, char **argv, char **envp)
 
     if (lwp == RT_NULL)
     {
-        dbg_log(DBG_ERROR, "lwp struct out of memory!\n");
+        LOG_E("lwp struct out of memory!\n");
         return -ENOMEM;
     }
     LOG_D("lwp malloc : %p, size: %d!", lwp, sizeof(struct rt_lwp));
 
     if ((tid = lwp_tid_get()) == 0)
     {
-        lwp_ref_dec(lwp);
+        lwp_pid_rollback(lwp);
         return -ENOMEM;
     }
 #ifdef ARCH_MM_MMU
     if (lwp_user_space_init(lwp, 0) != 0)
     {
         lwp_tid_put(tid);
-        lwp_ref_dec(lwp);
+        lwp_pid_rollback(lwp);
         return -ENOMEM;
     }
 #endif
 
-    if ((aux = lwp_argscopy(lwp, argc, argv, envp)) == RT_NULL)
+    if ((aux = argscopy(lwp, argc, argv, envp)) == RT_NULL)
     {
         lwp_tid_put(tid);
-        lwp_ref_dec(lwp);
+        lwp_pid_rollback(lwp);
         return -ENOMEM;
     }
 
     result = lwp_load(filename, lwp, RT_NULL, 0, aux);
-#ifdef ARCH_MM_MMU
-    if (result == 1)
-    {
-        /* dynmaic */
-        lwp_unmap_user(lwp, (void *)(USER_VADDR_TOP - ARCH_PAGE_SIZE));
-        result = load_ldso(lwp, filename, argv, envp);
-    }
-#endif /* ARCH_MM_MMU */
     if (result == RT_EOK)
     {
         rt_thread_t thread = RT_NULL;
@@ -1465,7 +629,7 @@ pid_t lwp_execve(char *filename, int debug, int argc, char **argv, char **envp)
     }
 
     lwp_tid_put(tid);
-    lwp_ref_dec(lwp);
+    lwp_pid_rollback(lwp);
 
     return -RT_ERROR;
 }
@@ -1476,6 +640,21 @@ extern char **__environ;
 char **__environ = 0;
 #endif
 
+/**
+ * @brief Execute a new program in the current process context
+ *
+ * @param[in] filename Path to the executable file
+ * @param[in] debug Debug flag (non-zero enables debug mode)
+ * @param[in] argc Number of command line arguments
+ * @param[in] argv Array of command line argument strings
+ *
+ * @return Process ID (PID) of the new process on success
+ *         Negative error code on failure
+ *
+ * @note This is a wrapper function for lwp_execve.
+ *
+ * @see lwp_execve()
+ */
 pid_t exec(char *filename, int debug, int argc, char **argv)
 {
     setenv("OS", "RT-Thread", 1);
@@ -1483,6 +662,16 @@ pid_t exec(char *filename, int debug, int argc, char **argv)
 }
 
 #ifdef ARCH_MM_MMU
+/**
+ * @brief Saves thread-specific user settings (TID register)
+ *
+ * @param[in,out] thread Pointer to the thread control block
+ *
+ * @note This function stores the architecture-specific TID register
+ *       into the specified thread's control block.This is typically used
+ *       when switching between threads to preserve thread-specific settings
+ */
+
 void lwp_user_setting_save(rt_thread_t thread)
 {
     if (thread)
@@ -1491,6 +680,14 @@ void lwp_user_setting_save(rt_thread_t thread)
     }
 }
 
+/**
+ * @brief Restores thread-specific user settings (TID register and debug state)
+ *
+ * @param[in] thread Pointer to the thread control block
+ *
+ * @note This function restores architecture-specific Thread ID Register (TIDR) value
+ *       and debug-related settings for the specified thread.
+ */
 void lwp_user_setting_restore(rt_thread_t thread)
 {
     if (!thread)
@@ -1533,6 +730,15 @@ void lwp_user_setting_restore(rt_thread_t thread)
 }
 #endif /* ARCH_MM_MMU */
 
+/**
+ * @brief Saves user thread context pointer
+ *
+ * @param[in] ctx Pointer to user thread context structure to be saved
+ *
+ * @note This function stores a pointer to user thread context in the current thread's
+ *       control block for later restoration. The context pointer is typically used
+ *       during thread context switching.
+ */
 void lwp_uthread_ctx_save(void *ctx)
 {
     rt_thread_t thread;
@@ -1540,6 +746,12 @@ void lwp_uthread_ctx_save(void *ctx)
     thread->user_ctx.ctx = ctx;
 }
 
+/**
+ * @brief Restores the user thread context by clearing the context pointer
+ *
+ * @note Typically called during thread context switching to clean up any
+ *       previously saved user context.
+ */
 void lwp_uthread_ctx_restore(void)
 {
     rt_thread_t thread;
@@ -1547,6 +759,17 @@ void lwp_uthread_ctx_restore(void)
     thread->user_ctx.ctx = RT_NULL;
 }
 
+/**
+ * @brief Prints a backtrace of the current thread's call stack
+ *
+ * @param[in] uthread The thread to backtrace (must be associated with an LWP)
+ * @param[in] frame Pointer to the initial stack frame
+ *
+ * @return RT_EOK on success, -RT_ERROR on failure
+ *
+ * @note This function prints a backtrace of the call stack for the specified user thread,
+ *       providing addresses that can be used with addr2line to get file and line information.
+ */
 rt_err_t lwp_backtrace_frame(rt_thread_t uthread, struct rt_hw_backtrace_frame *frame)
 {
     rt_err_t rc = -RT_ERROR;
@@ -1560,12 +783,12 @@ rt_err_t lwp_backtrace_frame(rt_thread_t uthread, struct rt_hw_backtrace_frame *
         argv = lwp_get_command_line_args(lwp);
         if (argv)
         {
-            rt_kprintf("please use: addr2line -e %s -a -f", argv[0]);
+            rt_kprintf("please use: addr2line -e %s -a -f\n", argv[0]);
             lwp_free_command_line_args(argv);
         }
         else
         {
-            rt_kprintf("please use: addr2line -e %s -a -f", lwp->cmd);
+            rt_kprintf("please use: addr2line -e %s -a -f\n", lwp->cmd);
         }
 
         while (nesting < RT_BACKTRACE_LEVEL_MAX_NR)
@@ -1581,38 +804,4 @@ rt_err_t lwp_backtrace_frame(rt_thread_t uthread, struct rt_hw_backtrace_frame *
         rc = RT_EOK;
     }
     return rc;
-}
-
-void rt_update_process_times(void)
-{
-    struct rt_thread *thread;
-#ifdef RT_USING_SMP
-    struct rt_cpu* pcpu;
-
-    pcpu = rt_cpu_self();
-#endif
-
-    thread = rt_thread_self();
-
-    if (!IS_USER_MODE(thread))
-    {
-        thread->user_time += 1;
-#ifdef RT_USING_SMP
-        pcpu->cpu_stat.user += 1;
-#endif
-    }
-    else
-    {
-        thread->system_time += 1;
-#ifdef RT_USING_SMP
-        if (thread == pcpu->idle_thread)
-        {
-            pcpu->cpu_stat.idle += 1;
-        }
-        else
-        {
-            pcpu->cpu_stat.system += 1;
-        }
-#endif
-    }
 }

@@ -1,4 +1,6 @@
 *.pyc
+**/Cargo.lock
+**/target/
 *.map
 *.dblite
 *.elf
@@ -11,8 +13,10 @@
 *.ilk
 *.old
 *.crf
+*.dtb*
 build
 Debug
+.vs
 rtthread
 settings
 documentation/html
@@ -29,7 +33,6 @@ documentation/html
 *.su
 #source insight 4 project files
 *.si4project
-tools/kconfig-frontends/kconfig-mconf
 packages
 dist
 rt-studio-project
@@ -44,6 +47,7 @@ ncscope.*
 tags
 
 .idea
+**/.cache/
 .vscode
 *.code-workspace
 *.eide.*
@@ -51,3 +55,19 @@ tags
 CMakeLists.txt
 cmake-build-debug
 *.mk
+
+# vDSO
+vdso_sys.os
+vdso.lds
+
+# cherryusb libraries
+!components/drivers/usb/cherryusb/port/pusb2/*.a
+!components/drivers/usb/cherryusb/port/xhci/phytium/*.a
+!components/drivers/usb/cherryusb/platform/rtthread
+
+# stm32cubemx
+**/CubeMX_Config/Drivers/
+**/CubeMX_Config/MDK-ARM/
+
+# mac
+.DS_Store

@@ -41,6 +41,10 @@
 #define INTF_SO_SNDBUF      7
 #define INTF_SO_SNDLOWAT    19
 #define INTF_SO_RCVLOWAT    18
+#define INTF_SO_BINDTODEVICE        25
+#define INTF_SO_TIMESTAMPNS         35
+#define INTF_SO_TIMESTAMPING        37
+#define INTF_SO_SELECT_ERR_QUEUE    45
 
 #define IMPL_SO_BROADCAST   0x0020
 #define IMPL_SO_KEEPALIVE   0x0008
@@ -59,6 +63,10 @@
 #define IMPL_SO_SNDBUF      0x1001
 #define IMPL_SO_SNDLOWAT    0x1003
 #define IMPL_SO_RCVLOWAT    0x1004
+#define IMPL_SO_BINDTODEVICE        0x100b
+#define IMPL_SO_TIMESTAMPNS         INTF_SO_TIMESTAMPNS
+#define IMPL_SO_TIMESTAMPING        INTF_SO_TIMESTAMPING
+#define IMPL_SO_SELECT_ERR_QUEUE    INTF_SO_SELECT_ERR_QUEUE
 
 /* IPPROTO_IP option names */
 #define INTF_IP_TTL 2
@@ -98,6 +106,33 @@ struct musl_sockaddr
 {
     uint16_t sa_family;
     char     sa_data[14];
+};
+
+struct musl_msghdr
+{
+    void *msg_name;
+    socklen_t msg_namelen;
+    struct iovec *msg_iov;
+#if defined(ARCH_CPU_64BIT) && defined(__BYTE_ORDER__) && \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    int padding1;
+#endif
+    int msg_iovlen;
+#if defined(ARCH_CPU_64BIT) && defined(__BYTE_ORDER__) && \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    int padding1;
+#endif
+    void *msg_control;
+#if defined(ARCH_CPU_64BIT) && defined(__BYTE_ORDER__) && \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    int padding2;
+#endif
+    socklen_t msg_controllen;
+#if defined(ARCH_CPU_64BIT) && defined(__BYTE_ORDER__) && \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    int padding2;
+#endif
+    int msg_flags;
 };
 
 struct musl_ifmap {

@@ -9,6 +9,14 @@
 | `Docs` | Windows 构建烧录指南、QSPI 启动记录和 SVD |
 | `Scripts` | Windows/Linux 构建、OpenOCD、PyOCD 和调试脚本 |
 
+当前 App 与 Boot 使用 RT-Thread 5.4.0 主线快照（上游提交
+`6fdfe700`），QSPI 启动和 H750 板级改动已保留。升级与实板验证记录见
+`Docs/RTTHREAD_UPGRADE.md`。
+
+App 已提供 DP83848C RMII/lwIP 网络、SDMMC1、FDCAN1、USART2
+RS-485、SPI W25Q64、LED 和 DoIP UDP/TCP 13400 网关；硬件对应关系
+见 `Docs/HARDWARE_FROM_SCHEMATIC.md`，DoIP 测试见 `Docs/DOIP.md`。
+
 ## 快速开始
 
 ```powershell

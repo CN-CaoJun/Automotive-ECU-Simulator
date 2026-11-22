@@ -187,6 +187,14 @@ static void *gicv3_hwirq_reg_base(int hwirq, rt_uint32_t offset, rt_uint32_t *in
     return base + gicv3_hwirq_convert_offset_index(hwirq, offset, index);
 }
 
+static rt_bool_t gicv3_hwirq_peek(int hwirq, rt_uint32_t offset)
+{
+    rt_uint32_t index;
+    void *base = gicv3_hwirq_reg_base(hwirq, offset, &index);
+
+    return !!HWREG32(base + (index / 32) * 4);
+}
+
 static void gicv3_hwirq_poke(int hwirq, rt_uint32_t offset)
 {
     rt_uint32_t index;
@@ -207,6 +215,11 @@ static void gicv3_dist_init(void)
 
     LOG_D("%d SPIs implemented", _gic.line_nr - 32);
     LOG_D("%d Extended SPIs implemented", _gic.espi_nr);
+
+    if (_gic.skip_init)
+    {
+        goto _get_max_irq;
+    }
 
     /* Disable the distributor */
     HWREG32(base + GICD_CTLR) = 0;
@@ -258,20 +271,26 @@ static void gicv3_dist_init(void)
         HWREG64(base + GICD_IROUTERnE + i * 8) = affinity;
     }
 
-    if (GICD_TYPER_NUM_LPIS(_gic.gicd_typer))
+_get_max_irq:
+    if (GICD_TYPER_NUM_LPIS(_gic.gicd_typer) > 1)
     {
         /* Max LPI = 8192 + Math.pow(2, num_LPIs + 1) - 1 */
-        rt_size_t num_lpis = (1 << (GICD_TYPER_NUM_LPIS(_gic.gicd_typer) + 1)) + 1;
+        rt_size_t num_lpis = 1UL << (GICD_TYPER_NUM_LPIS(_gic.gicd_typer) + 1);
 
-        _gic.lpi_nr = rt_min_t(int, num_lpis, 1 << GICD_TYPER_ID_BITS(_gic.gicd_typer));
+        _gic.lpi_nr = rt_min_t(int, num_lpis, 1UL << GICD_TYPER_ID_BITS(_gic.gicd_typer));
     }
     else
     {
-        _gic.lpi_nr = 1 << GICD_TYPER_ID_BITS(_gic.gicd_typer);
+        _gic.lpi_nr = 1UL << GICD_TYPER_ID_BITS(_gic.gicd_typer);
     }
 
     /* SPI + eSPI + LPIs */
-    _gic.irq_nr = _gic.line_nr - 32 + _gic.espi_nr + _gic.lpi_nr;
+    _gic.irq_nr = _gic.line_nr - 32 + _gic.espi_nr;
+#ifdef RT_PIC_ARM_GIC_V3_ITS
+    /* ITS will allocate  the same number of lpi PIRQs */
+    _gic.lpi_nr = rt_min_t(rt_size_t, RT_PIC_ARM_GIC_V3_ITS_IRQ_MAX, _gic.lpi_nr);
+    _gic.irq_nr += _gic.lpi_nr;
+#endif
 }
 
 static void gicv3_redist_enable(rt_bool_t enable)
@@ -381,6 +400,8 @@ static void gicv3_cpu_init(void)
     int cpu_id = rt_hw_cpu_id();
 #ifdef ARCH_SUPPORT_HYP
     _gicv3_eoi_mode_ns = RT_TRUE;
+#else
+    _gicv3_eoi_mode_ns = !!rt_ofw_bootargs_select("pic.gicv3_eoimode", 0);
 #endif
 
     base = gicv3_percpu_redist_sgi_base();
@@ -600,6 +621,79 @@ static void gicv3_irq_send_ipi(struct rt_pic_irq *pirq, rt_bitmap_t *cpumask)
 #undef __mpidr_to_sgi_affinity
 }
 
+static rt_err_t gicv3_irq_set_state(struct rt_pic *pic, int hwirq, int type, rt_bool_t state)
+{
+    rt_err_t err = RT_EOK;
+    rt_uint32_t offset = 0;
+
+    if (hwirq >= 8192)
+    {
+        type = -1;
+    }
+
+    switch (type)
+    {
+    case RT_IRQ_STATE_PENDING:
+        offset = state ? GICD_ISPENDR : GICD_ICPENDR;
+        break;
+    case RT_IRQ_STATE_ACTIVE:
+        offset = state ? GICD_ISACTIVER : GICD_ICACTIVER;
+        break;
+    case RT_IRQ_STATE_MASKED:
+        if (state)
+        {
+            struct rt_pic_irq pirq = {};
+
+            pirq.hwirq = hwirq;
+            gicv3_irq_mask(&pirq);
+        }
+        else
+        {
+            offset = GICD_ISENABLER;
+        }
+        break;
+    default:
+        err = -RT_EINVAL;
+        break;
+    }
+
+    if (!err && offset)
+    {
+        gicv3_hwirq_poke(hwirq, offset);
+    }
+
+    return err;
+}
+
+static rt_err_t gicv3_irq_get_state(struct rt_pic *pic, int hwirq, int type, rt_bool_t *out_state)
+{
+    rt_err_t err = RT_EOK;
+    rt_uint32_t offset = 0;
+
+    switch (type)
+    {
+    case RT_IRQ_STATE_PENDING:
+        offset = GICD_ISPENDR;
+        break;
+    case RT_IRQ_STATE_ACTIVE:
+        offset = GICD_ISACTIVER;
+        break;
+    case RT_IRQ_STATE_MASKED:
+        offset = GICD_ISENABLER;
+        break;
+    default:
+        err = -RT_EINVAL;
+        break;
+    }
+
+    if (!err)
+    {
+        *out_state = gicv3_hwirq_peek(hwirq, offset);
+    }
+
+    return err;
+}
+
 static int gicv3_irq_map(struct rt_pic *pic, int hwirq, rt_uint32_t mode)
 {
     struct rt_pic_irq *pirq;
@@ -619,13 +713,16 @@ static int gicv3_irq_map(struct rt_pic *pic, int hwirq, rt_uint32_t mode)
     if (pirq && hwirq >= GIC_SGI_NR)
     {
         pirq->mode = mode;
+        pirq->priority = GICD_INT_DEF_PRI;
 
         switch (gicv3_hwirq_type(hwirq))
         {
+        case PPI_TYPE:
+            gic_fill_ppi_affinity(pirq->affinity);
+            break;
         case SPI_TYPE:
         case ESPI_TYPE:
-            pirq->priority = GICD_INT_DEF_PRI;
-            rt_bitmap_set_bit(pirq->affinity, _init_cpu_id);
+            RT_IRQ_AFFINITY_SET(pirq->affinity, _init_cpu_id);
         default:
             break;
         }
@@ -701,7 +798,7 @@ static rt_err_t gicv3_irq_parse(struct rt_pic *pic, struct rt_ofw_cell_args *arg
     return err;
 }
 
-static struct rt_pic_ops gicv3_ops =
+const static struct rt_pic_ops gicv3_ops =
 {
     .name = "GICv3",
     .irq_init = gicv3_irq_init,
@@ -713,6 +810,8 @@ static struct rt_pic_ops gicv3_ops =
     .irq_set_affinity = gicv3_irq_set_affinity,
     .irq_set_triger_mode = gicv3_irq_set_triger_mode,
     .irq_send_ipi = gicv3_irq_send_ipi,
+    .irq_set_state = gicv3_irq_set_state,
+    .irq_get_state = gicv3_irq_get_state,
     .irq_map = gicv3_irq_map,
     .irq_parse = gicv3_irq_parse,
 };
@@ -737,7 +836,18 @@ static rt_bool_t gicv3_handler(void *data)
         }
         else
         {
-            pirq = rt_pic_find_irq(&gic->parent, hwirq - GIC_SGI_NR);
+            int irq_index;
+
+            if (hwirq < 8192)
+            {
+                irq_index = hwirq - GIC_SGI_NR;
+            }
+            else
+            {
+                irq_index = gic->irq_nr - gic->lpi_nr + hwirq - 8192;
+            }
+
+            pirq = rt_pic_find_irq(&gic->parent, irq_index);
         }
 
         gicv3_irq_ack(pirq);
@@ -959,6 +1069,7 @@ static rt_err_t gicv3_ofw_init(struct rt_ofw_node *np, const struct rt_ofw_node_
             redist_stride = 0;
         }
         _gic.redist_stride = redist_stride;
+        _gic.skip_init = rt_ofw_prop_read_bool(np, "skip-init");
 
         gic_common_init_quirk_ofw(np, _gicv3_quirks, &_gic.parent);
         gicv3_init();

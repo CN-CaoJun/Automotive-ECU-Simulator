@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2024 RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -16,11 +16,25 @@
 
 #define MODULE_ROOT_DIR     "/modules"
 
+/**
+ * @brief  dynamically load a shared library at runtime.
+ *
+ * @param  filename the path to the shared library to load, which shouldn't be set to NULL.
+ * @param  flags options for loading the shared library.
+ * @return void* on success, it returns a handle (a pointer) to the opened shared library, otherwise it returns NULL.
+ *
+ * @note   This function is an API of POSIX standard, which is used for dynamically loading shared libraries at runtime.
+ *         the function first tries to check if the module is already loaded, by finding module in module list.
+ *         If module is found in memory (RT_NULL check fails), the reference count (nref) is incremented.
+ *         Otherwise,  dlmodule_load() will be called to load the module into memory.
+ *         A handle (a pointer to the module) is returned at last, which can be used with other functions like dlsym().
+ */
 void* dlopen(const char *filename, int flags)
 {
     struct rt_dlmodule *module;
     char *fullpath;
-    const char*def_path = MODULE_ROOT_DIR;
+    const char *def_path = MODULE_ROOT_DIR;
+    char module_name[RT_NAME_MAX];
 
     /* check parameters */
     RT_ASSERT(filename != RT_NULL);
@@ -35,15 +49,21 @@ void* dlopen(const char *filename, int flags)
     }
     else
     {
-        fullpath = (char*)filename; /* absolute path, use it directly */
+        fullpath = (char *)filename; /* absolute path, use it directly */
     }
+
+    /* Extract module name from path (strip directory and extension)
+     * This matches the logic in _dlmodule_set_name() so that dlmodule_find()
+     * can properly locate already-loaded modules by their stored name.
+     */
+    dlmodule_extract_name(fullpath, module_name, RT_NAME_MAX);
 
     rt_enter_critical();
 
-    /* find in module list */
-    module = dlmodule_find(fullpath);
+    /* find in module list using the stripped module name */
+    module = dlmodule_find(module_name);
 
-    if(module != RT_NULL)
+    if (module != RT_NULL)
     {
         rt_exit_critical();
         module->nref++;
@@ -54,11 +74,11 @@ void* dlopen(const char *filename, int flags)
         module = dlmodule_load(fullpath);
     }
 
-    if(fullpath != filename)
+    if (fullpath != filename)
     {
         rt_free(fullpath);
     }
 
-    return (void*)module;
+    return (void *)module;
 }
 RTM_EXPORT(dlopen);

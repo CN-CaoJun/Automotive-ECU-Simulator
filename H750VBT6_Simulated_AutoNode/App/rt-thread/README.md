@@ -11,7 +11,9 @@
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/RT-Thread/rt-thread?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![GitHub pull-requests](https://img.shields.io/github/issues-pr/RT-Thread/rt-thread.svg)](https://github.com/RT-Thread/rt-thread/pulls)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)](https://github.com/RT-Thread/rt-thread/pulls)
-
+[![RT-Thread BSP Static Build Check](https://github.com/RT-Thread/rt-thread/actions/workflows/bsp_buildings.yml/badge.svg)](https://github.com/RT-Thread/rt-thread/actions/workflows/bsp_buildings.yml)
+[![MemBrowse](https://membrowse.com/badge.svg)](https://membrowse.com/public/RT-Thread/rt-thread)
+<a href="https://hellogithub.com/repository/5816fc3c1e714d109631ceb377538ca9" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=5816fc3c1e714d109631ceb377538ca9&claim_uid=kVCe5FXIMGAjJfy" alt="Featured｜HelloGitHub" style="width: 100px; height: 20px;" width="250" height="54" /></a>
 # RT-Thread
 
 RT-Thread was born in 2006, it is an open source, neutral, and community-based real-time operating system (RTOS).
@@ -53,7 +55,7 @@ It includes:
 
 | Name          | Description                                             |
 | ------------- | ------------------------------------------------------- |
-| BSP          | Board Support Package based on the porting of various development boards |
+| bsp        | Board Support Package based on the porting of various development boards |
 | components    | Components, such as finsh shell, file system, protocol stack etc. |
 | documentation | Related documents, like coding style, doxygen etc.        |
 | examples      | Related sample code                                     |
@@ -122,7 +124,7 @@ Based on [STM32F103 BluePill](https://github.com/RT-Thread/rt-thread/tree/master
 ## Simulator
 
 RT-Thread BSP can be compiled directly and downloaded to the corresponding development board for use. In addition, RT-Thread also provides qemu-vexpress-a9 BSP, which can be used without hardware platform. See the getting started guide below for details. Getting Started of QEMU with Env:
-[Windows](documentation/quick-start/quick_start_qemu/quick_start_qemu.md) | [Linux Ubuntu](documentation/quick-start/quick_start_qemu/quick_start_qemu_linux.md) | [Mac OS](documentation/quick-start/quick_start_qemu/quick_start_qemu_macos.md)
+[Windows](documentation/2.quick-start/quick_start_qemu/quick_start_qemu_windows.md) | [Linux Ubuntu](documentation/2.quick-start/quick_start_qemu/quick_start_qemu_linux.md) | [Mac OS](documentation/2.quick-start/quick_start_qemu/quick_start_qemu_macos.md)
 
 # License
 

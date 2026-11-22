@@ -2,25 +2,26 @@
 
 ## 实板验证结果
 
-2026-11-22 在 STM32H750VBT6 + W25Q128 实板上完成验证：
+2026-11-23 在 STM32H750VBT6 + W25Q128 实板上使用 RT-Thread 5.4.0
+（主线 `6fdfe700`）完成验证：
 
 | 项目 | 结果 |
 | --- | --- |
 | QSPI JEDEC ID | `EF 40 18`（W25Q128） |
 | Boot 烧录 | `0x08000000`，OpenOCD 写入并校验通过 |
-| Boot 向量 | `SP=0x24000C68`，`Reset=0x08002221` |
-| Boot 大小 | `14,960` 字节，片内 128 KiB 限制内 |
+| Boot 向量 | `SP=0x24000C68`，`Reset=0x08002615` |
+| Boot 大小 | `16,000` 字节，片内 128 KiB 限制内 |
 | App 烧录 | `0x90000000`，OpenOCD 写入并校验通过 |
-| App 大小 | `224,028` 字节 |
-| App 向量 | `SP=0x24001280`，`Reset=0x90027D2D` |
-| App 入口断点 | `PC=0x90027D2C` |
+| App 大小 | `340,728` 字节 |
+| App 向量 | `SP=0x24001520`，`Reset=0x90041F59` |
+| App 入口断点 | `PC=0x90041F58` |
 | 运行时 VTOR | `0x90000000` |
 | 异常状态 | `CFSR=0x00000000`，`HFSR=0x00000000` |
-| 连续运行 | 受控复位后稳定运行 40 秒，未再次进入 Boot |
+| 连续运行 | 受控复位后稳定运行 20 秒，未再次进入 Boot |
 
-串口可同时看到 Boot 和 App 日志。App 未插 SD 卡时可能出现
-`mmcsd_dev: wait cmd completed timeout`，这是板级 SD 卡检测日志，与
-Boot/QSPI 启动无关。
+串口可同时看到 Boot 和 App 日志。SDMMC1 已接入 RT-Thread 5.4
+的 SDIO/块设备核心源文件；插入 TF 卡时能识别 SDHC 卡，容量
+`0x1D1E800 KiB`（约 29.1 GiB），不再触发 UsageFault。
 
 ## 分区和引脚
 
@@ -137,13 +138,18 @@ Boot 实板输出：
 [Boot] RT-Thread QSPI bootloader
 [Boot] QSPI JEDEC ID: EF4018
 [Boot] QSPI mapped in 4-bit mode.
-[Boot] Application vector: SP=0x24001280 entry=0x90027D2D
+[Boot] Application vector: SP=0x24001520 entry=0x90041F59
 [Boot] Jumping to application at 0x90000000
 ```
 
 随后 App 输出 RT-Thread 启动信息和应用日志，包括：
 
 ```text
+ \ | /
+- RT -     Thread Operating System
+ / | \     5.4.0 build Nov 22 2026 23:06:05
+ 2006 - 2026 Copyright by RT-Thread team
+
 initialize rti_board_start:0 done
 initialize rt_hw_can_init:0 done
 do components initialization.
@@ -157,7 +163,7 @@ App 入口和运行时状态可用下面的断点检查复现：
 cd H750VBT6_Simulated_AutoNode/Scripts/openocd-scripts
 
 openocd -f interface/cmsis-dap.cfg -f target/stm32h7x_extern.cfg -c \
-  'init; reset halt; bp 0x90027d2c 2 hw; resume; wait_halt 5000;
+  'init; reset halt; bp 0x90041f58 2 hw; resume; wait_halt 5000;
    echo "--- app entry ---";
    echo [format "VTOR=%08x" [mrw 0xE000ED08]];
    echo [format "CFSR=%08x" [mrw 0xE000ED28]];
@@ -168,7 +174,7 @@ openocd -f interface/cmsis-dap.cfg -f target/stm32h7x_extern.cfg -c \
 
 ```text
 [stm32h7x.cpu0] halted due to breakpoint, current mode: Thread
-xPSR: 0x61000000 pc: 0x90027d2c psp: ...
+   xPSR: 0x61000000 pc: 0x90041f58 psp: ...
 --- app entry ---
 VTOR=90000000
 CFSR=00000000

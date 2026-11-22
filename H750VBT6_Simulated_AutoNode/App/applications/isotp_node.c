@@ -6,6 +6,7 @@
 #include "time.h"
 
 #include "isotp.h"
+#include "isotp_node.h"
 
 #include <rtthread.h>
 #include "rtdevice.h"
@@ -20,12 +21,22 @@
 #define RET_NO_DATA 3
 
 #define FRAMESDUMAX 4095
+#define CAN_REQUEST_ID 0x731
+#define CAN_RESPONSE_ID 0x739
 /* Alloc IsoTpLink statically in RAM */
 static IsoTpLink g_link;
+static IsoTpLink g_doip_link;
 
 /* Alloc send and receive buffer statically in RAM */
 static uint8_t g_isotpRecvBuf[FRAMESDUMAX];
 static uint8_t g_isotpSendBuf[FRAMESDUMAX];
+static uint8_t g_doipRecvBuf[FRAMESDUMAX];
+static uint8_t g_doipSendBuf[FRAMESDUMAX];
+static uint8_t g_doipOutBuf[FRAMESDUMAX];
+
+static rt_mutex_t g_doip_lock;
+static void (*g_doip_rx_callback)(const uint8_t *data, uint16_t len);
+static rt_bool_t g_isotp_started;
 
 #define CAN_DEV_NAME "fdcan1"
 
@@ -68,33 +79,46 @@ static void cantp_rx_thread(void *parameter)
 {
     int i;
     int ret;
-    rt_err_t res;
+    rt_size_t read_size;
     struct rt_can_msg rxmsg = {0};
 
     rt_device_set_rx_indicate(can_dev, can_rx_call);
 
     while (1)
     {
-        rxmsg.hdr_index = -1;
-
-        rt_sem_take(&tprx_sem, RT_WAITING_NO);
+        rt_sem_take(&tprx_sem, rt_tick_from_millisecond(5));
 
         if (isfdcan1open == DEVICEOPEN)
         {
-            size_t read_size = rt_device_read(can_dev, 0, &rxmsg, sizeof(rxmsg));
-            if (read_size == sizeof(rxmsg))
+            do
             {
+                rxmsg.hdr_index = -1;
+                read_size = rt_device_read(can_dev, 0, &rxmsg, sizeof(rxmsg));
+                if (read_size != sizeof(rxmsg))
+                {
+                    break;
+                }
+
                 LOG_D("RX ID-> %X ", rxmsg.id);
                 for (i = 0; i < dlc_to_length(rxmsg.len); i++)
                 {
                     LOG_D("%02x", rxmsg.data[i]);
                 }
-                if (0x731 == rxmsg.id)
+
+                if (CAN_REQUEST_ID == rxmsg.id)
                 {
                     isotp_on_can_message(&g_link, rxmsg.data, dlc_to_length(rxmsg.len));
                 }
-            }
+                else if (CAN_RESPONSE_ID == rxmsg.id && g_doip_lock != RT_NULL)
+                {
+                    rt_mutex_take(g_doip_lock, RT_WAITING_FOREVER);
+                    isotp_on_can_message(&g_doip_link, rxmsg.data, dlc_to_length(rxmsg.len));
+                    rt_mutex_release(g_doip_lock);
+                }
+            } while (1);
 
+            isotp_poll(&g_link);
+            payload_size = sizeof(payload);
             ret = isotp_receive(&g_link, payload, payload_size, &out_size);
             if (ISOTP_RET_OK == ret)
             {
@@ -107,28 +131,59 @@ static void cantp_rx_thread(void *parameter)
             {
                 // LOG_D("Received not complete!!!");
             }
-        
-            isotp_poll(&g_link);
 
+            if (g_doip_lock != RT_NULL)
+            {
+                rt_mutex_take(g_doip_lock, RT_WAITING_FOREVER);
+                isotp_poll(&g_doip_link);
+                ret = isotp_receive(&g_doip_link, g_doipOutBuf,
+                                    sizeof(g_doipOutBuf), &out_size);
+                if (ISOTP_RET_OK == ret && g_doip_rx_callback != RT_NULL)
+                {
+                    g_doip_rx_callback(g_doipOutBuf, out_size);
+                }
+                rt_mutex_release(g_doip_lock);
+            }
         }
     }
+}
+
+int rtcan_isotp_route_send(const uint8_t *data, uint16_t len)
+{
+    int result;
+
+    if (g_doip_lock == RT_NULL || len == 0 || len > sizeof(g_doipSendBuf))
+    {
+        return -RT_EINVAL;
+    }
+
+    rt_mutex_take(g_doip_lock, RT_WAITING_FOREVER);
+    result = isotp_send(&g_doip_link, data, len);
+    rt_mutex_release(g_doip_lock);
+
+    return result == ISOTP_RET_OK ? RT_EOK : -RT_ERROR;
+}
+
+void rtcan_isotp_set_rx_callback(void (*callback)(const uint8_t *data, uint16_t len))
+{
+    g_doip_rx_callback = callback;
 }
 
 int rt_can_send(const uint32_t arbitration_id,
                 const uint8_t *data, const uint8_t DLC)
 {
     struct rt_can_msg msg = {0};
-    rt_err_t res;
+    rt_err_t res = RT_ERROR;
     rt_size_t size;
 
-    if (isfdcan1open == DEVICEOPEN)
+    if ((isfdcan1open == DEVICEOPEN) && (can_dev != RT_NULL))
     {
         msg.id = arbitration_id;
         msg.ide = RT_CAN_STDID;
         msg.rtr = RT_CAN_DTR;
-        msg.len = 8;
+        msg.len = DLC;
 
-        memcpy(msg.data, data, DLC);
+        memcpy(msg.data, data, DLC > sizeof(msg.data) ? sizeof(msg.data) : DLC);
 
         size = rt_device_write(can_dev, 0, &msg, sizeof(msg));
         if (size == 0)
@@ -168,15 +223,29 @@ int cantp_tx_thread(void)
 
 int rtcan_node_start()
 {
-    struct rt_can_msg msg = {0};
     rt_err_t res;
-    rt_size_t size;
     rt_thread_t thread;
     char can_name[RT_NAME_MAX];
 
-    isotp_init_link(&g_link, 0x739,
+    if (g_isotp_started)
+    {
+        return RT_EOK;
+    }
+
+    isotp_init_link(&g_link, CAN_RESPONSE_ID,
                     g_isotpSendBuf, sizeof(g_isotpSendBuf),
                     g_isotpRecvBuf, sizeof(g_isotpRecvBuf));
+    isotp_init_link(&g_doip_link, CAN_REQUEST_ID,
+                    g_doipSendBuf, sizeof(g_doipSendBuf),
+                    g_doipRecvBuf, sizeof(g_doipRecvBuf));
+    isotp_set_flow_control_id(&g_link, CAN_RESPONSE_ID);
+    isotp_set_flow_control_id(&g_doip_link, CAN_RESPONSE_ID);
+
+    g_doip_lock = rt_mutex_create("doipisotp", RT_IPC_FLAG_PRIO);
+    if (g_doip_lock == RT_NULL)
+    {
+        return -RT_ERROR;
+    }
 
     for (int i = 0; i < 100; i++)
     {
@@ -210,6 +279,7 @@ int rtcan_node_start()
     {
         rt_thread_startup(thread);
         LOG_D("create cantp_rx thread success!");
+        g_isotp_started = RT_TRUE;
     }
     else
     {

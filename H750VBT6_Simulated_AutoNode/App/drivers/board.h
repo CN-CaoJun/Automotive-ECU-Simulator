@@ -70,6 +70,11 @@ extern "C"
 #define BSP_UART1_TX_PIN       "PA9"
 #define BSP_UART1_RX_PIN       "PA10"
 
+/* USART2 is connected to the on-board SP3485 RS-485 transceiver. */
+#define BSP_USING_UART2
+#define BSP_UART2_TX_PIN       "PD5"
+#define BSP_UART2_RX_PIN       "PD6"
+
 /*-------------------------- UART CONFIG END --------------------------*/
 
 /*-------------------------- I2C CONFIG BEGIN --------------------------*/
@@ -116,7 +121,9 @@ extern "C"
  *                 such as     #define HAL_SPI_MODULE_ENABLED
  */
 
-/*#define BSP_USING_SPI1*/
+/* W25Q64: PB3 SCK, PB4 MISO, PB5 MOSI, PD3 CS. */
+#define BSP_USING_SPI1
+#define BSP_SPI1_CS_PIN        GET_PIN(D, 3)
 /*#define BSP_USING_SPI2*/
 /*#define BSP_USING_SPI3*/
 
@@ -294,11 +301,14 @@ extern "C"
  *
  */
 
-/*#define BSP_USING_ETH*/
+/* The schematic uses a DP83848C RMII PHY and a 50 MHz oscillator. */
+#define BSP_USING_ETH
+#define BSP_USING_ETH_H750
+#define ETH_PHY_RESET_PIN      GET_PIN(A, 5)
 #ifdef BSP_USING_ETH
 /*#define PHY_USING_LAN8720A*/
 /*#define PHY_USING_DM9161CEP*/
-/*#define PHY_USING_DP83848C*/
+#define PHY_USING_DP83848C
 #endif
 /*-------------------------- ETH CONFIG END --------------------------*/
 
@@ -361,9 +371,10 @@ extern "C"
  */
 
 /*#define BSP_USING_ON_CHIP_FLASH*/
+/* The board has one TJA1050 connected to FDCAN1 on PB8/PB9. */
 #define BSP_USING_FDCAN
 #define BSP_USING_FDCAN1
-#define BSP_USING_FDCAN2
+/*#define BSP_USING_FDCAN2*/
 
 /*-------------------------- ON_CHIP_FLASH CONFIG END --------------------------*/
 

@@ -22,10 +22,53 @@ int rt_ofw_io_size_cells(struct rt_ofw_node *np);
 int rt_ofw_get_address_count(struct rt_ofw_node *np);
 rt_err_t rt_ofw_get_address(struct rt_ofw_node *np, int index, rt_uint64_t *out_address, rt_uint64_t *out_size);
 rt_err_t rt_ofw_get_address_by_name(struct rt_ofw_node *np, const char *name,
-        rt_uint64_t *out_address, rt_uint64_t *out_size);
+                                    rt_uint64_t *out_address, rt_uint64_t *out_size);
 int rt_ofw_get_address_array(struct rt_ofw_node *np, int nr, rt_uint64_t *out_regs);
 
 rt_uint64_t rt_ofw_translate_address(struct rt_ofw_node *np, const char *range_type, rt_uint64_t address);
+rt_uint64_t rt_ofw_reverse_address(struct rt_ofw_node *np, const char *range_type, rt_uint64_t address);
+
+rt_inline rt_uint64_t rt_ofw_translate_dma2cpu(struct rt_ofw_node *np, rt_uint64_t address)
+{
+    rt_uint64_t cpu_addr;
+
+    cpu_addr = rt_ofw_translate_address(np, "dma-ranges", address);
+    if (cpu_addr != ~0ULL && cpu_addr != address)
+    {
+        return cpu_addr;
+    }
+
+    cpu_addr = rt_ofw_translate_address(np, "ranges", address);
+    if (cpu_addr != ~0ULL && cpu_addr != address)
+    {
+        return cpu_addr;
+    }
+
+    return address;
+}
+
+rt_inline rt_uint64_t rt_ofw_translate_cpu2dma(struct rt_ofw_node *np, rt_uint64_t address)
+{
+    rt_uint64_t bus_addr, dma_addr;
+
+    dma_addr = rt_ofw_reverse_address(np, "dma-ranges", address);
+    if (dma_addr != ~0ULL && dma_addr != address)
+    {
+        return dma_addr;
+    }
+
+    bus_addr = rt_ofw_reverse_address(np, "ranges", address);
+    if (bus_addr != ~0ULL && bus_addr != address)
+    {
+        dma_addr = rt_ofw_reverse_address(np, "dma-ranges", bus_addr);
+        if (dma_addr != ~0ULL && dma_addr != address)
+        {
+            return dma_addr;
+        }
+    }
+
+    return address;
+}
 
 void *rt_ofw_iomap(struct rt_ofw_node *np, int index);
 void *rt_ofw_iomap_by_name(struct rt_ofw_node *np, const char *name);

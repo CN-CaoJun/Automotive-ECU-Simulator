@@ -15,6 +15,9 @@
 #include <armv8.h>
 #include "interrupt.h"
 #include "mm_aspace.h"
+#ifdef RT_USING_PIC
+#include <drivers/pic.h>
+#endif
 
 #define DBG_TAG "libcpu.trap"
 #define DBG_LVL DBG_LOG
@@ -62,26 +65,26 @@ static void _check_fault(struct rt_hw_exp_stack *regs, uint32_t pc_adj, char *in
 rt_inline int _get_type(unsigned long esr)
 {
     int ret;
-    int fsc = esr & 0x3f;
+    int fsc = ARM64_ESR_EXTRACT_FSC(esr);
     switch (fsc)
     {
-        case 0x4:
-        case 0x5:
-        case 0x6:
-        case 0x7:
+        case ARM64_FSC_TRANSLATION_FAULT_LEVEL_0:
+        case ARM64_FSC_TRANSLATION_FAULT_LEVEL_1:
+        case ARM64_FSC_TRANSLATION_FAULT_LEVEL_2:
+        case ARM64_FSC_TRANSLATION_FAULT_LEVEL_3:
             ret = MM_FAULT_TYPE_PAGE_FAULT;
             break;
-        case 0xc:
-        case 0xd:
-        case 0xe:
-        case 0xf:
-            ret = MM_FAULT_TYPE_ACCESS_FAULT;
+        case ARM64_FSC_PERMISSION_FAULT_LEVEL_0:
+        case ARM64_FSC_PERMISSION_FAULT_LEVEL_1:
+        case ARM64_FSC_PERMISSION_FAULT_LEVEL_2:
+        case ARM64_FSC_PERMISSION_FAULT_LEVEL_3:
+            ret = MM_FAULT_TYPE_RWX_PERM;
             break;
-        case 0x8:
-        case 0x9:
-        case 0xa:
-        case 0xb:
-            /* access flag fault */
+        case ARM64_FSC_ACCESS_FLAG_FAULT_LEVEL_0:
+        case ARM64_FSC_ACCESS_FLAG_FAULT_LEVEL_1:
+        case ARM64_FSC_ACCESS_FLAG_FAULT_LEVEL_2:
+        case ARM64_FSC_ACCESS_FLAG_FAULT_LEVEL_3:
+            /* access flag fault, not handle currently */
         default:
             ret = MM_FAULT_TYPE_GENERIC;
     }
@@ -96,28 +99,28 @@ rt_inline long _irq_is_disable(long cpsr)
 static int user_fault_fixable(unsigned long esr, struct rt_hw_exp_stack *regs)
 {
     rt_ubase_t level;
-    unsigned char ec;
-    void *dfar;
-    int ret = 0;
-
-    ec = (unsigned char)((esr >> 26) & 0x3fU);
     enum rt_mm_fault_op fault_op;
     enum rt_mm_fault_type fault_type;
     struct rt_lwp *lwp;
+    void *dfar;
+    int ret = 0;
+    unsigned char ec = ARM64_ESR_EXTRACT_EC(esr);
+    rt_bool_t is_write = ARM64_ABORT_WNR(esr);
 
     switch (ec)
     {
-    case 0x20:
+    case ARM64_EC_INST_ABORT_FROM_LO_EXCEPTION:
         fault_op = MM_FAULT_OP_EXECUTE;
         fault_type = _get_type(esr);
         break;
-    case 0x21:
-    case 0x24:
-    case 0x25:
-        fault_op = MM_FAULT_OP_WRITE;
+    case ARM64_EC_INST_ABORT_WITHOUT_A_CHANGE:
+    case ARM64_EC_DATA_ABORT_FROM_LO_EXCEPTION:
+    case ARM64_EC_DATA_ABORT_WITHOUT_A_CHANGE:
+        fault_op = is_write ? MM_FAULT_OP_WRITE : MM_FAULT_OP_READ;
         fault_type = _get_type(esr);
         break;
     default:
+        /* non-fixable */
         fault_op = 0;
         break;
     }
@@ -167,71 +170,8 @@ void rt_hw_show_register(struct rt_hw_exp_stack *regs)
 }
 
 #ifndef RT_USING_PIC
-void rt_hw_trap_irq(void)
+static void _rt_hw_trap_irq(rt_interrupt_context_t irq_context)
 {
-#ifdef SOC_BCM283x
-    extern rt_uint8_t core_timer_flag;
-    void *param;
-    uint32_t irq;
-    rt_isr_handler_t isr_func;
-    extern struct rt_irq_desc isr_table[];
-    uint32_t value = 0;
-    value = IRQ_PEND_BASIC & 0x3ff;
-
-    if(core_timer_flag != 0)
-    {
-        uint32_t cpu_id = rt_hw_cpu_id();
-        uint32_t int_source = CORE_IRQSOURCE(cpu_id);
-        if (int_source & 0x0f)
-        {
-            if (int_source & 0x08)
-            {
-                isr_func = isr_table[IRQ_ARM_TIMER].handler;
-#ifdef RT_USING_INTERRUPT_INFO
-                isr_table[IRQ_ARM_TIMER].counter++;
-#endif
-                if (isr_func)
-                {
-                    param = isr_table[IRQ_ARM_TIMER].param;
-                    isr_func(IRQ_ARM_TIMER, param);
-                }
-            }
-        }
-    }
-
-    /* local interrupt*/
-    if (value)
-    {
-        if (value & (1 << 8))
-        {
-            value = IRQ_PEND1;
-            irq = __rt_ffs(value) - 1;
-        }
-        else if (value & (1 << 9))
-        {
-            value = IRQ_PEND2;
-            irq = __rt_ffs(value) + 31;
-        }
-        else
-        {
-            value &= 0x0f;
-            irq = __rt_ffs(value) + 63;
-        }
-
-        /* get interrupt service routine */
-        isr_func = isr_table[irq].handler;
-#ifdef RT_USING_INTERRUPT_INFO
-        isr_table[irq].counter++;
-#endif
-        if (isr_func)
-        {
-            /* Interrupt for myself. */
-            param = isr_table[irq].param;
-            /* turn to interrupt service routine */
-            isr_func(irq, param);
-        }
-    }
-#else
     void *param;
     int ir, ir_self;
     rt_isr_handler_t isr_func;
@@ -266,14 +206,25 @@ void rt_hw_trap_irq(void)
 
     /* end of interrupt */
     rt_hw_interrupt_ack(ir);
-#endif
 }
 #else
-void rt_hw_trap_irq(void)
+static void _rt_hw_trap_irq(struct rt_interrupt_context *this_ctx)
 {
     rt_pic_do_traps();
 }
 #endif
+
+void rt_hw_trap_irq(struct rt_hw_exp_stack *regs)
+{
+    struct rt_interrupt_context this_ctx = {
+        .context = regs,
+        .node = RT_SLIST_OBJECT_INIT(this_ctx.node),
+    };
+
+    rt_interrupt_context_push(&this_ctx);
+    _rt_hw_trap_irq(&this_ctx);
+    rt_interrupt_context_pop();
+}
 
 #ifdef RT_USING_SMART
 #define DBG_CHECK_EVENT(regs, esr) dbg_check_event(regs, esr)
@@ -370,7 +321,7 @@ void rt_hw_trap_exception(struct rt_hw_exp_stack *regs)
 #endif
 
     struct rt_hw_backtrace_frame frame = {.fp = regs->x29, .pc = regs->pc};
-    rt_backtrace_frame(&frame);
+    rt_backtrace_frame(rt_thread_self(), &frame);
     rt_hw_cpu_shutdown();
 }
 
@@ -382,5 +333,8 @@ void rt_hw_trap_serror(struct rt_hw_exp_stack *regs)
 #ifdef RT_USING_FINSH
     list_thread();
 #endif
+
+    struct rt_hw_backtrace_frame frame = {.fp = regs->x29, .pc = regs->pc};
+    rt_backtrace_frame(rt_thread_self(), &frame);
     rt_hw_cpu_shutdown();
 }

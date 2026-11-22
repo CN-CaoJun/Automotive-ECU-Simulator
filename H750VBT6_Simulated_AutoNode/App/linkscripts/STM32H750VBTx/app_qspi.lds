@@ -6,6 +6,7 @@ MEMORY
 {
     ROM (rx) : ORIGIN = 0x90000000, LENGTH = 16M
     RAM (rw) : ORIGIN = 0x24000000, LENGTH = 512k
+    D2SRAM3 (rw) : ORIGIN = 0x30040000, LENGTH = 32k
 }
 ENTRY(Reset_Handler)
 _system_stack_size = 0x400;
@@ -118,6 +119,24 @@ SECTIONS
     __bss_end = .;
 
     _end = .;
+
+    .RxDecripSection (NOLOAD) :
+    {
+        . = ALIGN(32);
+        KEEP(*(.RxDecripSection))
+    } > D2SRAM3
+
+    .TxDecripSection (NOLOAD) :
+    {
+        . = ALIGN(32);
+        KEEP(*(.TxDecripSection))
+    } > D2SRAM3
+
+    .RxArraySection (NOLOAD) :
+    {
+        . = ALIGN(32);
+        KEEP(*(.RxArraySection))
+    } > D2SRAM3
 
     .stab          0 : { *(.stab) }
     .stabstr       0 : { *(.stabstr) }

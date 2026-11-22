@@ -8,15 +8,19 @@
  * 2023-01-30     GuEe-GUI     first version
  */
 
-#ifndef __IRQ_GIC_COMMON_H__
-#define __IRQ_GIC_COMMON_H__
+#ifndef __PIC_GIC_COMMON_H__
+#define __PIC_GIC_COMMON_H__
 
 #include <rtdef.h>
+
+#ifdef RT_PCI_MSI
+#include <drivers/pci_msi.h>
+#endif
 #include <drivers/ofw.h>
 
 #define GIC_SGI_NR  16
 
-#define GICD_INT_DEF_PRI        0xa0
+#define GICD_INT_DEF_PRI        0xa0U
 #define GICD_INT_DEF_PRI_X4     \
 (                               \
     (GICD_INT_DEF_PRI << 24) |  \
@@ -43,6 +47,8 @@ rt_err_t gic_common_configure_irq(void *base, int irq, rt_uint32_t mode, void (*
 void gic_common_dist_config(void *base, int max_irqs, void (*sync_access)(void *), void *data);
 void gic_common_cpu_config(void *base, int nr, void (*sync_access)(void *), void *data);
 
+void gic_fill_ppi_affinity(rt_bitmap_t *affinity);
+
 #ifdef RT_PIC_ARM_GIC_V2M
 rt_err_t gicv2m_ofw_probe(struct rt_ofw_node *ic_np, const struct rt_ofw_node_id *id);
 #endif
@@ -50,4 +56,4 @@ rt_err_t gicv2m_ofw_probe(struct rt_ofw_node *ic_np, const struct rt_ofw_node_id
 rt_err_t gicv3_its_ofw_probe(struct rt_ofw_node *ic_np, const struct rt_ofw_node_id *id);
 #endif
 
-#endif /* __IRQ_GIC_COMMON_H__ */
+#endif /* __PIC_GIC_COMMON_H__ */

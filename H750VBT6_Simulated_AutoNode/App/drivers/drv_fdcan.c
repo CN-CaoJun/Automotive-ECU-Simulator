@@ -138,7 +138,7 @@ static rt_err_t _inline_can_config(struct rt_can_device *can, struct can_configu
 	case RT_CAN_MODE_NORMAL:
 		pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_NORMAL;
 		break;
-	case RT_CAN_MODE_LISEN:
+	case RT_CAN_MODE_LISTEN:
 		pdrv_can->fdcanHandle.Init.Mode = FDCAN_MODE_BUS_MONITORING;
 		break;
 	case RT_CAN_MODE_LOOPBACK:
@@ -337,7 +337,7 @@ static rt_err_t _inline_can_control(struct rt_can_device *can, int cmd, void *ar
 	case RT_CAN_CMD_SET_MODE:
 		argval = (rt_uint32_t) arg;
 		if (argval != RT_CAN_MODE_NORMAL &&
-			argval != RT_CAN_MODE_LISEN &&
+			argval != RT_CAN_MODE_LISTEN &&
 			argval != RT_CAN_MODE_LOOPBACK &&
 			argval != RT_CAN_MODE_LOOPBACKANLISTEN)
 		{
@@ -404,7 +404,7 @@ static rt_err_t _inline_can_control(struct rt_can_device *can, int cmd, void *ar
 	return RT_EOK;
 }
 
-static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_uint32_t box_num)
+static rt_ssize_t _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_uint32_t box_num)
 {
 
 	_stm32_fdcan_t *pdrv_can;
@@ -451,6 +451,12 @@ static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 	if (pmsg->fd_frame == 1)
 	{
 		pdrv_can->TxHeader.FDFormat = FDCAN_FD_CAN;
+		pdrv_can->TxHeader.BitRateSwitch = pmsg->brs ? FDCAN_BRS_ON : FDCAN_BRS_OFF;
+	}
+	else
+	{
+		pdrv_can->TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
+		pdrv_can->TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
 	}
 
 	if(HAL_FDCAN_AddMessageToTxBuffer(&pdrv_can->fdcanHandle, &pdrv_can->TxHeader, pmsg->data, FDCAN_TX_BUFFER0 + box_num) != HAL_OK)
@@ -465,7 +471,7 @@ static int _inline_can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 	}
 }
 
-static int _inline_can_recvmsg(struct rt_can_device *can, void *buf, rt_uint32_t fifo)
+static rt_ssize_t _inline_can_recvmsg(struct rt_can_device *can, void *buf, rt_uint32_t fifo)
 {
 
     struct rt_can_msg *pmsg;
@@ -478,7 +484,7 @@ static int _inline_can_recvmsg(struct rt_can_device *can, void *buf, rt_uint32_t
     pmsg = (struct rt_can_msg *) buf;
     if(HAL_FDCAN_GetRxMessage(&pdrv_can->fdcanHandle,FDCAN_RX_FIFO0+fifo, &pdrv_can->RxHeader, pmsg->data) != HAL_OK)
     {
-    	return -RT_ERROR;
+	return -1;
     }
     else
     {
@@ -506,11 +512,11 @@ static int _inline_can_recvmsg(struct rt_can_device *can, void *buf, rt_uint32_t
     	pmsg->hdr_index = pdrv_can->RxHeader.FilterIndex;
 
 		#ifdef RT_CAN_USING_CANFD
-		pmsg->fd_frame =  (pdrv_can->RxHeader.FDFormat >> 16) && 0x20;
-		pmsg->brs = (pdrv_can->RxHeader.BitRateSwitch >> 16) && 0x10;;
+		pmsg->fd_frame = (pdrv_can->RxHeader.FDFormat == FDCAN_FD_CAN);
+		pmsg->brs = (pdrv_can->RxHeader.BitRateSwitch == FDCAN_BRS_ON);
 		#endif
     	
-		return RT_EOK;
+		return sizeof(struct rt_can_msg);
     }
 }
 

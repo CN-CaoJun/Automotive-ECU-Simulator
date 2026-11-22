@@ -134,12 +134,21 @@ int fdt_fd_associate_file(struct dfs_fdtable *fdt, int fd, struct dfs_file *file
 struct dfs_file *fd_get(int fd);
 void fd_release(int fd);
 
+/* Reference helpers used when an open file description crosses fd tables. */
+int dfs_file_get_refs(const int *fds, size_t count, struct dfs_file **files);
+/* Successful installation transfers the supplied references to the fd table. */
+int dfs_file_install_refs(struct dfs_file **files, size_t count, int *fds);
+void dfs_file_put_ref(struct dfs_file *file);
+
 void fd_init(struct dfs_file *fd);
 
 struct dfs_fdtable *dfs_fdtable_get(void);
 struct dfs_fdtable *dfs_fdtable_get_global(void);
 int dfs_dup(int oldfd, int startfd);
 #endif /* DFS_USING_POSIX */
+
+struct dfs_file* dfs_file_create(void);
+void dfs_file_destroy(struct dfs_file *file);
 
 #ifdef __cplusplus
 }

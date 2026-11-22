@@ -86,7 +86,7 @@ rt_err_t rt_device_bus_destroy(rt_device_t dev)
 #ifdef RT_USING_DM
 #include <drivers/core/bus.h>
 
-static struct rt_spinlock bus_lock = {};
+static RT_DEFINE_SPINLOCK(bus_lock);
 static rt_list_t bus_nodes = RT_LIST_OBJECT_INIT(bus_nodes);
 
 static void _dm_bus_lock(struct rt_spinlock *spinlock)
@@ -242,6 +242,29 @@ static int bus_probe_device(rt_driver_t drv, void *dev_ptr)
 }
 
 /**
+ *  @brief Retry matching an unbound device against the drivers on its bus
+ *
+ *  @param dev the device to probe
+ *
+ *  @return RT_EOK if the device is already bound or a probe succeeds
+ */
+rt_err_t rt_bus_probe_device(rt_device_t dev)
+{
+    if (!dev || !dev->bus)
+    {
+        return -RT_EINVAL;
+    }
+
+    if (dev->drv)
+    {
+        return RT_EOK;
+    }
+
+    return rt_bus_for_each_drv(dev->bus, dev, bus_probe_device);
+}
+RTM_EXPORT(rt_bus_probe_device);
+
+/**
  *  @brief This function add a driver to the drv_list of a specific bus
  *
  *  @param bus the bus to add
@@ -360,9 +383,9 @@ rt_err_t rt_bus_remove_device(rt_device_t dev)
     }
     else if (drv)
     {
-        if (drv->shutdown)
+        if (drv->remove)
         {
-            err = drv->shutdown(dev);
+            err = drv->remove(dev);
         }
 
         /* device and driver are in the same bus */

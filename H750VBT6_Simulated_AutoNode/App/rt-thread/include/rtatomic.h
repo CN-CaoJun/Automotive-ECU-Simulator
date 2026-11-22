@@ -7,6 +7,7 @@
  * Date           Author       Notes
  * 2023-03-14     WangShun     first version
  * 2023-05-20     Bernard      add stdc atomic detection.
+ * 2026-03-09     wdfk-prog    add 8/16-bit atomic operations support
  */
 #ifndef __RT_ATOMIC_H__
 #define __RT_ATOMIC_H__
@@ -17,8 +18,16 @@
 
 rt_atomic_t rt_hw_atomic_load(volatile rt_atomic_t *ptr);
 void rt_hw_atomic_store(volatile rt_atomic_t *ptr, rt_atomic_t val);
+rt_atomic8_t rt_hw_atomic_load8(volatile rt_atomic8_t *ptr);
+void rt_hw_atomic_store8(volatile rt_atomic8_t *ptr, rt_atomic8_t val);
+rt_atomic16_t rt_hw_atomic_load16(volatile rt_atomic16_t *ptr);
+void rt_hw_atomic_store16(volatile rt_atomic16_t *ptr, rt_atomic16_t val);
 rt_atomic_t rt_hw_atomic_add(volatile rt_atomic_t *ptr, rt_atomic_t val);
 rt_atomic_t rt_hw_atomic_sub(volatile rt_atomic_t *ptr, rt_atomic_t val);
+rt_atomic8_t rt_hw_atomic_and8(volatile rt_atomic8_t *ptr, rt_atomic8_t val);
+rt_atomic8_t rt_hw_atomic_or8(volatile rt_atomic8_t *ptr, rt_atomic8_t val);
+rt_atomic16_t rt_hw_atomic_and16(volatile rt_atomic16_t *ptr, rt_atomic16_t val);
+rt_atomic16_t rt_hw_atomic_or16(volatile rt_atomic16_t *ptr, rt_atomic16_t val);
 rt_atomic_t rt_hw_atomic_and(volatile rt_atomic_t *ptr, rt_atomic_t val);
 rt_atomic_t rt_hw_atomic_or(volatile rt_atomic_t *ptr, rt_atomic_t val);
 rt_atomic_t rt_hw_atomic_xor(volatile rt_atomic_t *ptr, rt_atomic_t val);
@@ -27,26 +36,21 @@ void rt_hw_atomic_flag_clear(volatile rt_atomic_t *ptr);
 rt_atomic_t rt_hw_atomic_flag_test_and_set(volatile rt_atomic_t *ptr);
 rt_atomic_t rt_hw_atomic_compare_exchange_strong(volatile rt_atomic_t *ptr, rt_atomic_t *expected, rt_atomic_t desired);
 
-#if defined(RT_USING_HW_ATOMIC)
-#define rt_atomic_load(ptr) rt_hw_atomic_load(ptr)
-#define rt_atomic_store(ptr, v) rt_hw_atomic_store(ptr, v)
-#define rt_atomic_add(ptr, v) rt_hw_atomic_add(ptr, v)
-#define rt_atomic_sub(ptr, v) rt_hw_atomic_sub(ptr, v)
-#define rt_atomic_and(ptr, v) rt_hw_atomic_and(ptr, v)
-#define rt_atomic_or(ptr, v)  rt_hw_atomic_or(ptr, v)
-#define rt_atomic_xor(ptr, v) rt_hw_atomic_xor(ptr, v)
-#define rt_atomic_exchange(ptr, v) rt_hw_atomic_exchange(ptr, v)
-#define rt_atomic_flag_clear(ptr) rt_hw_atomic_flag_clear(ptr)
-#define rt_atomic_flag_test_and_set(ptr) rt_hw_atomic_flag_test_and_set(ptr)
-#define rt_atomic_compare_exchange_strong(ptr, v,des) rt_hw_atomic_compare_exchange_strong(ptr, v ,des)
-
-#elif defined(RT_USING_STDC_ATOMIC)
+#if defined(RT_USING_STDC_ATOMIC)
 
 #ifndef __STDC_NO_ATOMICS__
 #define rt_atomic_load(ptr) atomic_load(ptr)
 #define rt_atomic_store(ptr, v) atomic_store(ptr, v)
+#define rt_atomic_load8(ptr) atomic_load(ptr)
+#define rt_atomic_store8(ptr, v) atomic_store(ptr, v)
+#define rt_atomic_load16(ptr) atomic_load(ptr)
+#define rt_atomic_store16(ptr, v) atomic_store(ptr, v)
 #define rt_atomic_add(ptr, v) atomic_fetch_add(ptr, v)
 #define rt_atomic_sub(ptr, v) atomic_fetch_sub(ptr, v)
+#define rt_atomic_and8(ptr, v) atomic_fetch_and(ptr, v)
+#define rt_atomic_or8(ptr, v) atomic_fetch_or(ptr, v)
+#define rt_atomic_and16(ptr, v) atomic_fetch_and(ptr, v)
+#define rt_atomic_or16(ptr, v) atomic_fetch_or(ptr, v)
 #define rt_atomic_and(ptr, v) atomic_fetch_and(ptr, v)
 #define rt_atomic_or(ptr, v)  atomic_fetch_or(ptr, v)
 #define rt_atomic_xor(ptr, v) atomic_fetch_xor(ptr, v)
@@ -58,12 +62,55 @@ rt_atomic_t rt_hw_atomic_compare_exchange_strong(volatile rt_atomic_t *ptr, rt_a
 #error "The standard library C doesn't support the atomic operation"
 #endif /* __STDC_NO_ATOMICS__ */
 
+#elif defined(RT_USING_HW_ATOMIC)
+#define rt_atomic_load(ptr) rt_hw_atomic_load(ptr)
+#define rt_atomic_store(ptr, v) rt_hw_atomic_store(ptr, v)
+#if defined(ARCH_USING_HW_ATOMIC_8)
+#define rt_atomic_load8(ptr) rt_hw_atomic_load8(ptr)
+#define rt_atomic_store8(ptr, v) rt_hw_atomic_store8(ptr, v)
+#define rt_atomic_and8(ptr, v) rt_hw_atomic_and8(ptr, v)
+#define rt_atomic_or8(ptr, v)  rt_hw_atomic_or8(ptr, v)
+#else
+#define rt_atomic_load8(ptr) rt_soft_atomic_load8(ptr)
+#define rt_atomic_store8(ptr, v) rt_soft_atomic_store8(ptr, v)
+#define rt_atomic_and8(ptr, v) rt_soft_atomic_and8(ptr, v)
+#define rt_atomic_or8(ptr, v)  rt_soft_atomic_or8(ptr, v)
+#endif
+#if defined(ARCH_USING_HW_ATOMIC_16)
+#define rt_atomic_load16(ptr) rt_hw_atomic_load16(ptr)
+#define rt_atomic_store16(ptr, v) rt_hw_atomic_store16(ptr, v)
+#define rt_atomic_and16(ptr, v) rt_hw_atomic_and16(ptr, v)
+#define rt_atomic_or16(ptr, v)  rt_hw_atomic_or16(ptr, v)
+#else
+#define rt_atomic_load16(ptr) rt_soft_atomic_load16(ptr)
+#define rt_atomic_store16(ptr, v) rt_soft_atomic_store16(ptr, v)
+#define rt_atomic_and16(ptr, v) rt_soft_atomic_and16(ptr, v)
+#define rt_atomic_or16(ptr, v)  rt_soft_atomic_or16(ptr, v)
+#endif
+#define rt_atomic_add(ptr, v) rt_hw_atomic_add(ptr, v)
+#define rt_atomic_sub(ptr, v) rt_hw_atomic_sub(ptr, v)
+#define rt_atomic_and(ptr, v) rt_hw_atomic_and(ptr, v)
+#define rt_atomic_or(ptr, v)  rt_hw_atomic_or(ptr, v)
+#define rt_atomic_xor(ptr, v) rt_hw_atomic_xor(ptr, v)
+#define rt_atomic_exchange(ptr, v) rt_hw_atomic_exchange(ptr, v)
+#define rt_atomic_flag_clear(ptr) rt_hw_atomic_flag_clear(ptr)
+#define rt_atomic_flag_test_and_set(ptr) rt_hw_atomic_flag_test_and_set(ptr)
+#define rt_atomic_compare_exchange_strong(ptr, v,des) rt_hw_atomic_compare_exchange_strong(ptr, v ,des)
+
 #else
 #include <rthw.h>
 #define rt_atomic_load(ptr) rt_soft_atomic_load(ptr)
 #define rt_atomic_store(ptr, v) rt_soft_atomic_store(ptr, v)
+#define rt_atomic_load8(ptr) rt_soft_atomic_load8(ptr)
+#define rt_atomic_store8(ptr, v) rt_soft_atomic_store8(ptr, v)
+#define rt_atomic_load16(ptr) rt_soft_atomic_load16(ptr)
+#define rt_atomic_store16(ptr, v) rt_soft_atomic_store16(ptr, v)
 #define rt_atomic_add(ptr, v) rt_soft_atomic_add(ptr, v)
 #define rt_atomic_sub(ptr, v) rt_soft_atomic_sub(ptr, v)
+#define rt_atomic_and8(ptr, v) rt_soft_atomic_and8(ptr, v)
+#define rt_atomic_or8(ptr, v)  rt_soft_atomic_or8(ptr, v)
+#define rt_atomic_and16(ptr, v) rt_soft_atomic_and16(ptr, v)
+#define rt_atomic_or16(ptr, v)  rt_soft_atomic_or16(ptr, v)
 #define rt_atomic_and(ptr, v) rt_soft_atomic_and(ptr, v)
 #define rt_atomic_or(ptr, v)  rt_soft_atomic_or(ptr, v)
 #define rt_atomic_xor(ptr, v) rt_soft_atomic_xor(ptr, v)
@@ -71,6 +118,100 @@ rt_atomic_t rt_hw_atomic_compare_exchange_strong(volatile rt_atomic_t *ptr, rt_a
 #define rt_atomic_flag_clear(ptr) rt_soft_atomic_flag_clear(ptr)
 #define rt_atomic_flag_test_and_set(ptr) rt_soft_atomic_flag_test_and_set(ptr)
 #define rt_atomic_compare_exchange_strong(ptr, v,des) rt_soft_atomic_compare_exchange_strong(ptr, v ,des)
+
+rt_inline rt_atomic8_t rt_soft_atomic_load8(volatile rt_atomic8_t *ptr)
+{
+    rt_base_t level;
+    rt_atomic8_t temp;
+
+    level = rt_hw_interrupt_disable();
+    temp = *ptr;
+    rt_hw_interrupt_enable(level);
+
+    return temp;
+}
+
+rt_inline void rt_soft_atomic_store8(volatile rt_atomic8_t *ptr, rt_atomic8_t val)
+{
+    rt_base_t level;
+
+    level = rt_hw_interrupt_disable();
+    *ptr = val;
+    rt_hw_interrupt_enable(level);
+}
+
+rt_inline rt_atomic16_t rt_soft_atomic_load16(volatile rt_atomic16_t *ptr)
+{
+    rt_base_t level;
+    rt_atomic16_t temp;
+
+    level = rt_hw_interrupt_disable();
+    temp = *ptr;
+    rt_hw_interrupt_enable(level);
+
+    return temp;
+}
+
+rt_inline void rt_soft_atomic_store16(volatile rt_atomic16_t *ptr, rt_atomic16_t val)
+{
+    rt_base_t level;
+
+    level = rt_hw_interrupt_disable();
+    *ptr = val;
+    rt_hw_interrupt_enable(level);
+}
+
+rt_inline rt_atomic8_t rt_soft_atomic_and8(volatile rt_atomic8_t *ptr, rt_atomic8_t val)
+{
+    rt_base_t level;
+    rt_atomic8_t temp;
+
+    level = rt_hw_interrupt_disable();
+    temp = *ptr;
+    *ptr = temp & val;
+    rt_hw_interrupt_enable(level);
+
+    return temp;
+}
+
+rt_inline rt_atomic8_t rt_soft_atomic_or8(volatile rt_atomic8_t *ptr, rt_atomic8_t val)
+{
+    rt_base_t level;
+    rt_atomic8_t temp;
+
+    level = rt_hw_interrupt_disable();
+    temp = *ptr;
+    *ptr = temp | val;
+    rt_hw_interrupt_enable(level);
+
+    return temp;
+}
+
+rt_inline rt_atomic16_t rt_soft_atomic_and16(volatile rt_atomic16_t *ptr, rt_atomic16_t val)
+{
+    rt_base_t level;
+    rt_atomic16_t temp;
+
+    level = rt_hw_interrupt_disable();
+    temp = *ptr;
+    *ptr = temp & val;
+    rt_hw_interrupt_enable(level);
+
+    return temp;
+}
+
+rt_inline rt_atomic16_t rt_soft_atomic_or16(volatile rt_atomic16_t *ptr, rt_atomic16_t val)
+{
+    rt_base_t level;
+    rt_atomic16_t temp;
+
+    level = rt_hw_interrupt_disable();
+    temp = *ptr;
+    *ptr = temp | val;
+    rt_hw_interrupt_enable(level);
+
+    return temp;
+}
 
 rt_inline rt_atomic_t rt_soft_atomic_exchange(volatile rt_atomic_t *ptr, rt_atomic_t val)
 {
@@ -203,7 +344,7 @@ rt_inline rt_atomic_t rt_soft_atomic_compare_exchange_strong(volatile rt_atomic_
 
 rt_inline rt_bool_t rt_atomic_dec_and_test(volatile rt_atomic_t *ptr)
 {
-    return rt_atomic_sub(ptr, 1) == 0;
+    return rt_atomic_sub(ptr, 1) == 1;
 }
 
 rt_inline rt_atomic_t rt_atomic_fetch_add_unless(volatile rt_atomic_t *ptr, rt_atomic_t a, rt_atomic_t u)
@@ -228,6 +369,39 @@ rt_inline rt_bool_t rt_atomic_add_unless(volatile rt_atomic_t *ptr, rt_atomic_t 
 rt_inline rt_bool_t rt_atomic_inc_not_zero(volatile rt_atomic_t *ptr)
 {
     return rt_atomic_add_unless(ptr, 1, 0);
+}
+
+/**
+ * @brief initialize a lock-less single list
+ *
+ * @param l the single list to be initialized
+ */
+rt_inline void rt_ll_slist_init(rt_ll_slist_t *l)
+{
+    l->next = 0;
+}
+
+rt_inline void rt_ll_slist_enqueue(rt_ll_slist_t *l, rt_ll_slist_t *n)
+{
+    rt_base_t exp;
+    exp = rt_atomic_load(&l->next);
+    do
+    {
+        n->next = exp;
+    } while (!rt_atomic_compare_exchange_strong(&l->next, &exp, (rt_base_t)n));
+}
+
+rt_inline rt_ll_slist_t *rt_ll_slist_dequeue(rt_ll_slist_t *l)
+{
+    rt_base_t exp;
+    rt_ll_slist_t *head;
+
+    exp = rt_atomic_load(&l->next);
+    do
+    {
+        head = (rt_ll_slist_t *)exp;
+    } while (head && !rt_atomic_compare_exchange_strong(&l->next, &exp, rt_atomic_load(&head->next)));
+    return head;
 }
 
 #endif /* __cplusplus */

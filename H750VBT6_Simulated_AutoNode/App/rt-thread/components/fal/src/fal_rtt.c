@@ -10,12 +10,18 @@
  */
 
 #include <fal.h>
-
-#ifdef RT_VER_NUM
-#include <rtthread.h>
-#include <rtdevice.h>
 #include <string.h>
 #include <stdlib.h>
+#include <rtdevice.h>
+
+#define DBG_TAG "FAL"
+#ifdef FAL_USING_DEBUG
+#define DBG_LVL DBG_LOG
+#else
+#define DBG_LVL DBG_WARNING
+#endif
+#include <rtdbg.h>
+
 
 /* ========================== block device ======================== */
 struct fal_blk_device
@@ -34,7 +40,7 @@ static rt_err_t blk_dev_control(rt_device_t dev, rt_uint8_t cmd, void *args)
 {
     struct fal_blk_device *part = (struct fal_blk_device*) dev;
 
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     if (cmd == RT_DEVICE_CTRL_BLK_GETGEOME)
     {
@@ -46,7 +52,7 @@ static rt_err_t blk_dev_control(rt_device_t dev, rt_uint8_t cmd, void *args)
             return -RT_ERROR;
         }
 
-        memcpy(geometry, &part->geometry, sizeof(struct rt_device_blk_geometry));
+        rt_memcpy(geometry, &part->geometry, sizeof(struct rt_device_blk_geometry));
     }
     else if (cmd == RT_DEVICE_CTRL_BLK_ERASE)
     {
@@ -80,7 +86,7 @@ static rt_ssize_t blk_dev_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_s
     int ret = 0;
     struct fal_blk_device *part = (struct fal_blk_device*) dev;
 
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     ret = fal_partition_read(part->fal_part, pos * part->geometry.block_size, buffer, size * part->geometry.block_size);
 
@@ -104,7 +110,7 @@ static rt_ssize_t blk_dev_write(rt_device_t dev, rt_off_t pos, const void* buffe
     rt_size_t phy_size;
 
     part = (struct fal_blk_device*) dev;
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     /* change the block device's logic address to physical address */
     phy_pos = pos * part->geometry.bytes_per_sector;
@@ -157,13 +163,14 @@ struct rt_device *fal_blk_device_create(const char *parition_name)
 
     if (!fal_part)
     {
-        log_e("Error: the partition name (%s) is not found.", parition_name);
+        LOG_E("Error: the partition name (%s) is not found.", parition_name);
         return NULL;
     }
 
-    if ((fal_flash = fal_flash_device_find(fal_part->flash_name)) == NULL)
+    fal_flash = fal_flash_device_find(fal_part->flash_name);
+    if (fal_flash == NULL)
     {
-        log_e("Error: the flash device name (%s) is not found.", fal_part->flash_name);
+        LOG_E("Error: the flash device name (%s) is not found.", fal_part->flash_name);
         return NULL;
     }
 
@@ -192,12 +199,12 @@ struct rt_device *fal_blk_device_create(const char *parition_name)
         /* no private */
         blk_dev->parent.user_data = RT_NULL;
 
-        log_i("The FAL block device (%s) created successfully", fal_part->name);
+        LOG_I("The FAL block device (%s) created successfully", fal_part->name);
         rt_device_register(RT_DEVICE(blk_dev), fal_part->name, RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_STANDALONE);
     }
     else
     {
-        log_e("Error: no memory for create FAL block device");
+        LOG_E("Error: no memory for create FAL block device");
     }
 
     return RT_DEVICE(blk_dev);
@@ -217,7 +224,7 @@ static rt_ssize_t mtd_nor_dev_read(struct rt_mtd_nor_device* device, rt_off_t of
     int ret = 0;
     struct fal_mtd_nor_device *part = (struct fal_mtd_nor_device*) device;
 
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     ret = fal_partition_read(part->fal_part, offset, data, length);
 
@@ -239,7 +246,7 @@ static rt_ssize_t mtd_nor_dev_write(struct rt_mtd_nor_device* device, rt_off_t o
     struct fal_mtd_nor_device *part;
 
     part = (struct fal_mtd_nor_device*) device;
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     ret = fal_partition_write(part->fal_part, offset, data, length);
 
@@ -261,7 +268,7 @@ static rt_err_t mtd_nor_dev_erase(struct rt_mtd_nor_device* device, rt_off_t off
     struct fal_mtd_nor_device *part;
 
     part = (struct fal_mtd_nor_device*) device;
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     ret = fal_partition_erase(part->fal_part, offset, length);
 
@@ -299,13 +306,14 @@ struct rt_device *fal_mtd_nor_device_create(const char *parition_name)
 
     if (!fal_part)
     {
-        log_e("Error: the partition name (%s) is not found.", parition_name);
+        LOG_E("Error: the partition name (%s) is not found.", parition_name);
         return NULL;
     }
 
-    if ((fal_flash = fal_flash_device_find(fal_part->flash_name)) == NULL)
+    fal_flash = fal_flash_device_find(fal_part->flash_name);
+    if (fal_flash == NULL)
     {
-        log_e("Error: the flash device name (%s) is not found.", fal_part->flash_name);
+        LOG_E("Error: the flash device name (%s) is not found.", fal_part->flash_name);
         return NULL;
     }
 
@@ -321,12 +329,12 @@ struct rt_device *fal_mtd_nor_device_create(const char *parition_name)
         /* set ops */
         mtd_nor_dev->parent.ops = &_ops;
 
-        log_i("The FAL MTD NOR device (%s) created successfully", fal_part->name);
+        LOG_I("The FAL MTD NOR device (%s) created successfully", fal_part->name);
         rt_mtd_nor_register_device(fal_part->name, &mtd_nor_dev->parent);
     }
     else
     {
-        log_e("Error: no memory for create FAL MTD NOR device");
+        LOG_E("Error: no memory for create FAL MTD NOR device");
     }
 
     return RT_DEVICE(&mtd_nor_dev->parent);
@@ -348,7 +356,7 @@ static rt_ssize_t char_dev_read(rt_device_t dev, rt_off_t pos, void *buffer, rt_
     int ret = 0;
     struct fal_char_device *part = (struct fal_char_device *) dev;
 
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     if (pos + size > part->fal_part->len)
         size = part->fal_part->len - pos;
@@ -367,7 +375,7 @@ static rt_ssize_t char_dev_write(rt_device_t dev, rt_off_t pos, const void *buff
     struct fal_char_device *part;
 
     part = (struct fal_char_device *) dev;
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     if (pos == 0)
     {
@@ -410,7 +418,7 @@ static int char_dev_fopen(struct dfs_file *fd)
 {
     struct fal_char_device *part = (struct fal_char_device *) fd->vnode->data;
 
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
     switch (fd->flags & O_ACCMODE)
     {
@@ -429,42 +437,56 @@ static int char_dev_fopen(struct dfs_file *fd)
     return RT_EOK;
 }
 
-static int char_dev_fread(struct dfs_file *fd, void *buf, size_t count)
+#ifdef RT_USING_DFS_V2
+static rt_ssize_t char_dev_fread(struct dfs_file *fd, void *buf, size_t count, off_t *pos)
+#else
+static rt_ssize_t char_dev_fread(struct dfs_file *fd, void *buf, size_t count)
+#endif
 {
-    int ret = 0;
+    rt_ssize_t ret = 0;
     struct fal_char_device *part = (struct fal_char_device *) fd->vnode->data;
+#ifndef RT_USING_DFS_V2
+    off_t *pos = &(fd->pos);
+#endif
 
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
-    if (DFS_FILE_POS(fd) + count > part->fal_part->len)
-        count = part->fal_part->len - DFS_FILE_POS(fd);
+    if (*pos + count > part->fal_part->len)
+        count = part->fal_part->len - *pos;
 
-    ret = fal_partition_read(part->fal_part, DFS_FILE_POS(fd), buf, count);
+    ret = fal_partition_read(part->fal_part, *pos, buf, count);
 
-    if (ret != (int)(count))
+    if (ret != (rt_ssize_t)(count))
         return 0;
 
-    DFS_FILE_POS(fd) += ret;
+    *pos += ret;
 
     return ret;
 }
 
-static int char_dev_fwrite(struct dfs_file *fd, const void *buf, size_t count)
+#ifdef RT_USING_DFS_V2
+static rt_ssize_t char_dev_fwrite(struct dfs_file *fd, const void *buf, size_t count, off_t *pos)
+#else
+static rt_ssize_t char_dev_fwrite(struct dfs_file *fd, const void *buf, size_t count)
+#endif
 {
-    int ret = 0;
+    rt_ssize_t ret = 0;
     struct fal_char_device *part = (struct fal_char_device *) fd->vnode->data;
+#ifndef RT_USING_DFS_V2
+    off_t *pos = &(fd->pos);
+#endif
 
-    assert(part != RT_NULL);
+    RT_ASSERT(part != RT_NULL);
 
-    if (DFS_FILE_POS(fd) + count > part->fal_part->len)
-        count = part->fal_part->len - DFS_FILE_POS(fd);
+    if (*pos + count > part->fal_part->len)
+        count = part->fal_part->len - *pos;
 
-    ret = fal_partition_write(part->fal_part, DFS_FILE_POS(fd), buf, count);
+    ret = fal_partition_write(part->fal_part, *pos, buf, count);
 
-    if (ret != (int) count)
+    if (ret != (rt_ssize_t) count)
         return 0;
 
-    DFS_FILE_POS(fd) += ret;
+    *pos += ret;
 
     return ret;
 }
@@ -498,13 +520,13 @@ struct rt_device *fal_char_device_create(const char *parition_name)
 
     if (!fal_part)
     {
-        log_e("Error: the partition name (%s) is not found.", parition_name);
+        LOG_E("Error: the partition name (%s) is not found.", parition_name);
         return NULL;
     }
 
     if ((fal_flash_device_find(fal_part->flash_name)) == NULL)
     {
-        log_e("Error: the flash device name (%s) is not found.", fal_part->flash_name);
+        LOG_E("Error: the flash device name (%s) is not found.", fal_part->flash_name);
         return NULL;
     }
 
@@ -530,7 +552,7 @@ struct rt_device *fal_char_device_create(const char *parition_name)
 #endif
 
         rt_device_register(RT_DEVICE(char_dev), fal_part->name, RT_DEVICE_FLAG_RDWR);
-        log_i("The FAL char device (%s) created successfully", fal_part->name);
+        LOG_I("The FAL char device (%s) created successfully", fal_part->name);
 
 #ifdef RT_USING_POSIX_DEVIO
         /* set fops */
@@ -540,7 +562,7 @@ struct rt_device *fal_char_device_create(const char *parition_name)
     }
     else
     {
-        log_e("Error: no memory for create FAL char device");
+        LOG_E("Error: no memory for create FAL char device");
     }
 
     return RT_DEVICE(char_dev);
@@ -551,7 +573,7 @@ struct rt_device *fal_char_device_create(const char *parition_name)
 #include <finsh.h>
 extern int fal_init_check(void);
 
-static void fal(uint8_t argc, char **argv) {
+static void fal(rt_uint8_t argc, char **argv) {
 
 #define __is_print(ch)                ((unsigned int)((ch) - ' ') < 127u - ' ')
 #define HEXDUMP_WIDTH                 16
@@ -564,7 +586,7 @@ static void fal(uint8_t argc, char **argv) {
     int result = 0;
     static const struct fal_flash_dev *flash_dev = NULL;
     static const struct fal_partition *part_dev = NULL;
-    size_t i = 0, j = 0;
+    rt_size_t i = 0, j = 0;
 
     const char* help_info[] =
     {
@@ -593,26 +615,31 @@ static void fal(uint8_t argc, char **argv) {
     else
     {
         const char *operator = argv[1];
-        uint32_t addr, size;
+        rt_uint32_t addr = 0, size = 0;
 
         if (!strcmp(operator, "probe"))
         {
             if (argc >= 3)
             {
                 char *dev_name = argv[2];
-                if ((flash_dev = fal_flash_device_find(dev_name)) != NULL)
+                flash_dev = fal_flash_device_find(dev_name);
+                if (flash_dev != NULL)
                 {
                     part_dev = NULL;
-                }
-                else if ((part_dev = fal_partition_find(dev_name)) != NULL)
-                {
-                    flash_dev = NULL;
                 }
                 else
                 {
-                    rt_kprintf("Device %s NOT found. Probe failed.\n", dev_name);
-                    flash_dev = NULL;
-                    part_dev = NULL;
+                    part_dev = fal_partition_find(dev_name);
+                    if (part_dev != NULL)
+                    {
+                        flash_dev = NULL;
+                    }
+                    else
+                    {
+                        rt_kprintf("Device %s NOT found. Probe failed.\n", dev_name);
+                        flash_dev = NULL;
+                        part_dev = NULL;
+                    }
                 }
             }
 
@@ -651,7 +678,7 @@ static void fal(uint8_t argc, char **argv) {
                 {
                     addr = strtol(argv[2], NULL, 0);
                     size = strtol(argv[3], NULL, 0);
-                    uint8_t *data = rt_malloc(size);
+                    rt_uint8_t *data = rt_malloc(size);
                     if (data)
                     {
                         if (flash_dev)
@@ -713,7 +740,7 @@ static void fal(uint8_t argc, char **argv) {
                 {
                     addr = strtol(argv[2], NULL, 0);
                     size = argc - 3;
-                    uint8_t *data = rt_malloc(size);
+                    rt_uint8_t *data = rt_malloc(size);
                     if (data)
                     {
                         for (i = 0; i < size; i++)
@@ -784,9 +811,9 @@ static void fal(uint8_t argc, char **argv) {
                     return;
                 }
                 /* full chip benchmark test */
-                uint32_t start_time, time_cast;
-                size_t write_size = strtol(argv[2], NULL, 0), read_size = strtol(argv[2], NULL, 0), cur_op_size;
-                uint8_t *write_data = (uint8_t *)rt_malloc(write_size), *read_data = (uint8_t *)rt_malloc(read_size);
+                rt_uint32_t start_time, time_cast;
+                rt_size_t write_size = strtol(argv[2], NULL, 0), read_size = strtol(argv[2], NULL, 0), cur_op_size;
+                rt_uint8_t *write_data = (rt_uint8_t *)rt_malloc(write_size), *read_data = (rt_uint8_t *)rt_malloc(read_size);
 
                 if (write_data && read_data)
                 {
@@ -880,7 +907,7 @@ static void fal(uint8_t argc, char **argv) {
                             result = fal_partition_read(part_dev, i, read_data, cur_op_size);
                         }
                         /* data check */
-                        for (size_t index = 0; index < cur_op_size; index ++)
+                        for (rt_size_t index = 0; index < cur_op_size; index ++)
                         {
                             if (write_data[index] != read_data[index])
                             {
@@ -936,4 +963,3 @@ static void fal(uint8_t argc, char **argv) {
 MSH_CMD_EXPORT(fal, FAL (Flash Abstraction Layer) operate.);
 
 #endif /* defined(RT_USING_FINSH) && defined(FINSH_USING_MSH) */
-#endif /* RT_VER_NUM */

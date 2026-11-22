@@ -41,6 +41,7 @@ typedef struct IsoTpLink {
 
     /* receiver paramters */
     uint32_t                    receive_arbitration_id;
+    uint32_t                    flow_control_arbitration_id;
     /* message buffer */
     uint8_t*                    receive_buffer;
     uint16_t                    receive_buf_size;
@@ -69,6 +70,8 @@ typedef struct IsoTpLink {
 void isotp_init_link(IsoTpLink *link, uint32_t sendid, 
                      uint8_t *sendbuf, uint16_t sendbufsize,
                      uint8_t *recvbuf, uint16_t recvbufsize);
+
+void isotp_set_flow_control_id(IsoTpLink *link, uint32_t id);
 
 /**
  * @brief Polling function; call this function periodically to handle timeouts, send consecutive frames, etc.

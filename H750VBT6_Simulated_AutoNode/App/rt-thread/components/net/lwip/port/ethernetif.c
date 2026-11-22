@@ -15,6 +15,7 @@
  * 2018-11-02     MurphyZhao   port to lwIP 2.1.0
  * 2021-09-07     Grissiom     fix eth_tx_msg ack bug
  * 2022-02-22     xiangxistu   integrate v1.4.1 v2.0.3 and v2.1.2 porting layer
+ * 2024-09-12     Evlers       add support for independent dns services for multiple network devices
  */
 
 /*
@@ -169,8 +170,11 @@ static int lwip_netdev_set_addr_info(struct netdev *netif, ip_addr_t *ip_addr, i
 }
 
 #ifdef RT_LWIP_DNS
-static int lwip_netdev_set_dns_server(struct netdev *netif, uint8_t dns_num, ip_addr_t *dns_server)
+static int lwip_netdev_set_dns_server(struct netdev *netdev, uint8_t dns_num, ip_addr_t *dns_server)
 {
+#if RT_USING_LWIP_VER_NUM >= 0x20102
+    netdev_low_level_set_dns_server(netdev, dns_num, dns_server);
+#else
 #if LWIP_VERSION_MAJOR == 1U /* v1.x */
     extern void dns_setserver(u8_t numdns, ip_addr_t *dnsserver);
 #else /* >=2.x */
@@ -178,6 +182,7 @@ static int lwip_netdev_set_dns_server(struct netdev *netif, uint8_t dns_num, ip_
 #endif /* LWIP_VERSION_MAJOR == 1U */
 
     dns_setserver(dns_num, dns_server);
+#endif /* RT_USING_LWIP_VER_NUM >= 0x20102 */
     return ERR_OK;
 }
 #endif /* RT_LWIP_DNS */
@@ -227,12 +232,13 @@ int lwip_netdev_ping(struct netdev *netif, const char *host, size_t data_len,
     RT_ASSERT(ping_resp);
 
     rt_memset(&hint, 0x00, sizeof(hint));
+    hint.ai_family = AF_INET;
     /* convert URL to IP */
     if (lwip_getaddrinfo(host, RT_NULL, &hint, &res) != 0)
     {
         return -RT_ERROR;
     }
-    SMEMCPY(&h, &res->ai_addr, sizeof(struct sockaddr_in *));
+    h = (struct sockaddr_in *)res->ai_addr;
     SMEMCPY(&ina, &h->sin_addr, sizeof(ina));
     lwip_freeaddrinfo(res);
     if (inet_aton(inet_ntoa(ina), &target_addr) == 0)
@@ -421,6 +427,11 @@ static int netdev_add(struct netif *lwip_netif)
     netdev->gw = lwip_netif->gw;
     netdev->netmask = lwip_netif->netmask;
 
+#ifdef NETDEV_USING_LINK_STATUS_CALLBACK
+    extern void netdev_status_change(struct netdev *netdev, enum netdev_cb_type type);
+    netdev_set_status_callback(netdev, netdev_status_change);
+#endif
+
     return result;
 }
 
@@ -436,6 +447,44 @@ static void netdev_del(struct netif *lwip_netif)
     netdev_unregister(netdev);
     rt_free(netdev);
 }
+
+#ifdef RT_LWIP_USING_LOOPBACK
+static int lwip_loopback_init(void)
+{
+    struct netif *netif = netif_find("lo0");
+    struct netdev *netdev;
+    err_t result;
+
+    if (netif == RT_NULL)
+    {
+        return -RT_ERROR;
+    }
+
+    netif->mtu = 65535;
+    if (netdev_add(netif) != RT_EOK)
+    {
+        return -RT_ERROR;
+    }
+
+    result = netifapi_netif_set_link_up(netif);
+    if (result == ERR_OK && netif_default == RT_NULL)
+    {
+        result = netifapi_netif_set_default(netif);
+    }
+    if (result != ERR_OK)
+    {
+        netdev_del(netif);
+        return -RT_ERROR;
+    }
+
+    netdev = netdev_get_by_name("lo");
+    netdev_low_level_set_dhcp_status(netdev, RT_FALSE);
+    netdev_low_level_set_status(netdev, RT_TRUE);
+    netdev_low_level_set_link_status(netdev, RT_TRUE);
+    return RT_EOK;
+}
+INIT_APP_EXPORT(lwip_loopback_init);
+#endif /* RT_LWIP_USING_LOOPBACK */
 #endif /* RT_USING_NETDEV */
 
 static err_t ethernetif_linkoutput(struct netif *netif, struct pbuf *p)

@@ -641,13 +641,13 @@ static rt_varea_t _varea_create(void *start, rt_size_t size)
 }
 
 #define _IS_OVERFLOW(start, length) ((length) > (0ul - (uintptr_t)(start)))
-#define _IS_OVERSIZE(start, length, limit_s, limit_sz) (((length) + (rt_size_t)((char *)(start) - (char *)(limit_start))) > (limit_size))
+#define _IS_OVERSIZE(start, length, limit_s, limit_sz) (((length) + (rt_size_t)((char *)(start) - (char *)(limit_s))) > (limit_sz))
 
-static inline int _not_in_range(void *start, rt_size_t length,
+static inline int _not_in_range(rt_size_t flags, void *start, rt_size_t length,
                                 void *limit_start, rt_size_t limit_size)
 {
     /* assuming (base + length) will not overflow except (0) */
-    int rc = start != RT_NULL
+    int rc = (flags & MMF_MAP_FIXED || start != RT_NULL)
                ? (_IS_OVERFLOW(start, length) || start < limit_start ||
                   _IS_OVERSIZE(start, length, limit_start, limit_size))
                : length > limit_size;
@@ -684,7 +684,7 @@ int rt_aspace_map(rt_aspace_t aspace, void **addr, rt_size_t length,
         LOG_I("%s(%p, %p, %lx, %lx, %lx, %p, %lx): Invalid input",
             __func__, aspace, addr, length, attr, flags, mem_obj, offset);
     }
-    else if (_not_in_range(*addr, length, aspace->start, aspace->size))
+    else if (_not_in_range(flags, *addr, length, aspace->start, aspace->size))
     {
         err = -RT_EINVAL;
         LOG_I("%s(addr:%p, len:%lx): out of range", __func__, *addr, length);
@@ -716,7 +716,7 @@ int rt_aspace_map_static(rt_aspace_t aspace, rt_varea_t varea, void **addr,
     int err;
 
     if (!aspace || !varea || !addr || !mem_obj || length == 0 ||
-        _not_in_range(*addr, length, aspace->start, aspace->size))
+        _not_in_range(flags, *addr, length, aspace->start, aspace->size))
     {
         err = -RT_EINVAL;
         LOG_W("%s: Invalid input", __func__);
@@ -766,9 +766,9 @@ int _mm_aspace_map_phy(rt_aspace_t aspace, rt_varea_t varea,
         LOG_W("%s: not aligned", __func__);
         err = -RT_EINVAL;
     }
-    else if (_not_in_range(hint->limit_start, hint->limit_range_size, aspace->start,
+    else if (_not_in_range(hint->flags, hint->limit_start, hint->limit_range_size, aspace->start,
                       aspace->size) ||
-        _not_in_range(hint->prefer, hint->map_size, aspace->start,
+        _not_in_range(hint->flags, hint->prefer, hint->map_size, aspace->start,
                       aspace->size))
     {
         LOG_W("%s: not in range", __func__);
@@ -892,7 +892,7 @@ int rt_aspace_unmap(rt_aspace_t aspace, void *addr)
         LOG_I("%s: Invalid input", __func__);
         error = -RT_EINVAL;
     }
-    else if (_not_in_range(addr, 1, aspace->start, aspace->size))
+    else if (_not_in_range(MMF_MAP_FIXED, addr, 1, aspace->start, aspace->size))
     {
         LOG_I("%s: %lx not in range of aspace[%lx:%lx]", __func__, addr,
               aspace->start, (char *)aspace->start + aspace->size);
@@ -1041,7 +1041,7 @@ int rt_aspace_unmap_range(rt_aspace_t aspace, void *addr, size_t length)
         LOG_I("%s: Invalid input", __func__);
         error = -RT_EINVAL;
     }
-    else if (_not_in_range(addr, length, aspace->start, aspace->size))
+    else if (_not_in_range(MMF_MAP_FIXED, addr, length, aspace->start, aspace->size))
     {
         LOG_I("%s: %lx not in range of aspace[%lx:%lx]", __func__, addr,
               aspace->start, (char *)aspace->start + aspace->size);
@@ -1069,7 +1069,7 @@ int rt_aspace_unmap_range(rt_aspace_t aspace, void *addr, size_t length)
 }
 
 void *rt_aspace_mremap_range(rt_aspace_t aspace, void *old_address, size_t old_size,
-                                size_t new_size, int flags, void *new_address)
+                             size_t new_size, int flags, void *new_address)
 {
     void *ret = RT_NULL;
 
@@ -1077,7 +1077,8 @@ void *rt_aspace_mremap_range(rt_aspace_t aspace, void *old_address, size_t old_s
     {
         LOG_I("%s: Invalid input", __func__);
     }
-    else if (_not_in_range(old_address, old_size, aspace->start, aspace->size))
+    else if (_not_in_range(MMF_MAP_FIXED, old_address, old_size,
+                           aspace->start, aspace->size))
     {
         LOG_I("%s: %lx not in range of aspace[%lx:%lx]", __func__, old_address,
               aspace->start, (char *)aspace->start + aspace->size);
@@ -1148,12 +1149,17 @@ static void *_ascending_search(rt_varea_t varea, rt_size_t req_size,
         rt_varea_t nx_va = ASPACE_VAREA_NEXT(varea);
         if (nx_va)
         {
-            rt_size_t gap_size =
-                (char *)_lower(limit.end, (char *)nx_va->start - 1) - candidate + 1;
-            if (gap_size >= req_size)
+            if (candidate < (char *)nx_va->start)
             {
-                ret = candidate;
-                break;
+                rt_size_t gap_size =
+                    (char *)_lower(limit.end, (char *)nx_va->start - 1) -
+                    candidate + 1;
+
+                if (gap_size >= req_size)
+                {
+                    ret = candidate;
+                    break;
+                }
             }
         }
         else
@@ -1171,15 +1177,16 @@ static void *_find_head_and_asc_search(rt_aspace_t aspace, rt_size_t req_size,
                                        struct _mm_range limit)
 {
     void *va = RT_NULL;
+    char *candidate = _align(limit.start, align_mask);
 
-    rt_varea_t varea = _aspace_bst_search_exceed(aspace, limit.start);
+    rt_varea_t varea = _aspace_bst_search_exceed(aspace, candidate);
     if (varea)
     {
-        char *candidate = _align(limit.start, align_mask);
         rt_size_t gap_size = (char *)varea->start - candidate;
         if (gap_size >= req_size)
         {
-            rt_varea_t former = _aspace_bst_search(aspace, limit.start);
+            /* try previous memory region of varea if possible */
+            rt_varea_t former = ASPACE_VAREA_PREV(varea);
             if (former)
             {
                 candidate = _align((char *)former->start + former->size, align_mask);
@@ -1202,12 +1209,7 @@ static void *_find_head_and_asc_search(rt_aspace_t aspace, rt_size_t req_size,
     }
     else
     {
-        char *candidate;
-        rt_size_t gap_size;
-
-        candidate = limit.start;
-        candidate = _align(candidate, align_mask);
-        gap_size = (char *)limit.end - candidate + 1;
+        rt_size_t gap_size = (char *)limit.end - candidate + 1;
 
         if (gap_size >= req_size)
             va = candidate;
@@ -1216,6 +1218,12 @@ static void *_find_head_and_asc_search(rt_aspace_t aspace, rt_size_t req_size,
     return va;
 }
 
+/**
+ * Find a memory region that:
+ * - is free
+ * - sits inside the limit range
+ * - meets the alignment requirement
+ */
 static void *_find_free(rt_aspace_t aspace, void *prefer, rt_size_t req_size,
                         void *limit_start, rt_size_t limit_size,
                         mm_flag_t flags)
@@ -1230,20 +1238,42 @@ static void *_find_free(rt_aspace_t aspace, void *prefer, rt_size_t req_size,
         align_mask = ~((1 << MMF_GET_ALIGN(flags)) - 1);
     }
 
-    if (prefer != RT_NULL)
+    if (flags & MMF_MAP_FIXED)
     {
-        /* if prefer and free, just return the prefer region */
-        prefer = _align(prefer, align_mask);
         struct _mm_range range = {prefer, (char *)prefer + req_size - 1};
-        varea = _aspace_bst_search_overlap(aspace, range);
 
+        /* caller should guarantee that the request region is legal */
+        RT_ASSERT(!_not_in_range(flags, prefer, req_size, limit_start, limit_size));
+
+        varea = _aspace_bst_search_overlap(aspace, range);
         if (!varea)
         {
             va = prefer;
         }
-        else if (flags & MMF_MAP_FIXED)
+        else
         {
-            /* OVERLAP */
+            /* region not freed */
+        }
+    }
+    else if (prefer != RT_NULL)
+    {
+        struct _mm_range range;
+
+        /* ceiling the prefer address */
+        prefer = _align(prefer, align_mask);
+        if (_not_in_range(flags, prefer, req_size, limit_start, limit_size))
+        {
+            prefer = limit_start;
+        }
+
+        range.start = prefer;
+        range.end = (char *)prefer + req_size - 1;
+        varea = _aspace_bst_search_overlap(aspace, range);
+
+        if (!varea)
+        {
+            /* if preferred and free, just return the prefer region */
+            va = prefer;
         }
         else
         {
@@ -1282,8 +1312,8 @@ int rt_aspace_load_page(rt_aspace_t aspace, void *addr, rt_size_t npage)
         err = -RT_ENOENT;
     }
     else if ((char *)addr >= end || (rt_size_t)addr & ARCH_PAGE_MASK ||
-             _not_in_range(addr, npage << ARCH_PAGE_SHIFT, varea->start,
-                           varea->size))
+             _not_in_range(MMF_MAP_FIXED, addr, npage << ARCH_PAGE_SHIFT,
+                           varea->start, varea->size))
     {
         LOG_W("%s: Unaligned parameter or out of range", __func__);
         err = -RT_EINVAL;
@@ -1310,7 +1340,8 @@ int rt_varea_map_page(rt_varea_t varea, void *vaddr, void *page)
         LOG_W("%s: page is not in kernel space", __func__);
         err = -RT_ERROR;
     }
-    else if (_not_in_range(vaddr, ARCH_PAGE_SIZE, varea->start, varea->size))
+    else if (_not_in_range(MMF_MAP_FIXED, vaddr, ARCH_PAGE_SIZE,
+                           varea->start, varea->size))
     {
         LOG_W("%s(%p,%lx): not in range of varea(%p,%lx)", __func__,
             vaddr, ARCH_PAGE_SIZE, varea->start, varea->size);
@@ -1349,7 +1380,8 @@ int rt_varea_map_range(rt_varea_t varea, void *vaddr, void *paddr, rt_size_t len
         LOG_W("%s(%p,%p,%p,%lx): invalid input", __func__, varea, vaddr, paddr, length);
         err = -RT_EINVAL;
     }
-    else if (_not_in_range(vaddr, length, varea->start, varea->size))
+    else if (_not_in_range(MMF_MAP_FIXED, vaddr, length,
+                           varea->start, varea->size))
     {
         LOG_W("%s(%p,%lx): not in range of varea(%p,%lx)", __func__,
             vaddr, length, varea->start, varea->size);
@@ -1382,7 +1414,8 @@ int rt_varea_unmap_range(rt_varea_t varea, void *vaddr, rt_size_t length)
         LOG_W("%s(%p,%p,%lx): invalid input", __func__, varea, vaddr, length);
         err = -RT_EINVAL;
     }
-    else if (_not_in_range(vaddr, length, varea->start, varea->size))
+    else if (_not_in_range(MMF_MAP_FIXED, vaddr, length,
+                           varea->start, varea->size))
     {
         LOG_W("%s(%p,%lx): not in range of varea(%p,%lx)", __func__,
             vaddr, length, varea->start, varea->size);
@@ -1739,7 +1772,7 @@ rt_err_t rt_aspace_page_put(rt_aspace_t aspace, void *page_va, void *buffer)
                     RDWR_LOCK(aspace);
                     struct rt_aspace_fault_msg msg;
                     msg.fault_op = MM_FAULT_OP_WRITE;
-                    msg.fault_type = MM_FAULT_TYPE_ACCESS_FAULT;
+                    msg.fault_type = MM_FAULT_TYPE_GENERIC_MMU;
                     msg.fault_vaddr = page_va;
                     rc = rt_varea_fix_private_locked(varea, rt_hw_mmu_v2p(aspace, page_va),
                                                     &msg, RT_TRUE);

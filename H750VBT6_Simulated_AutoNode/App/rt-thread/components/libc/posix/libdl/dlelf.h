@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2024 RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -202,6 +202,8 @@ typedef struct
 #define STT_HIPROC              15
 
 #define STN_UNDEF               0              /* undefined */
+#define SHN_UNDEF               0x0000         /* undefined section */
+#define SHN_COMMON              0xfff2         /* common symbols (uninitialized globals) */
 
 #define ELF_ST_BIND(info)       ((info) >> 4)
 #define ELF_ST_TYPE(info)       ((info) & 0xf)

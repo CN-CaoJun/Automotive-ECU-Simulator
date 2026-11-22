@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2023-06-04     GuEe-GUI     the first version
+ * 2025-12-25     lhxj         fix OFW bus conflict and prevent duplicate device creation
  */
 
 #include <rtthread.h>
@@ -17,7 +18,9 @@
 #include <drivers/ofw_io.h>
 #include <drivers/ofw_fdt.h>
 #include <drivers/platform.h>
+#include <drivers/core/bus.h>
 #include <drivers/core/dm.h>
+#include <drivers/misc.h>
 
 #include "../ofw/ofw_internal.h"
 
@@ -40,6 +43,20 @@ static const struct rt_ofw_node_id platform_ofw_ids[] =
     { /* sentinel */ }
 };
 
+static void ofw_address_to_string(char *buffer, rt_size_t size, rt_uint64_t address)
+{
+    rt_uint32_t address_hi = rt_upper_32_bits(address);
+
+    if (address_hi)
+    {
+        rt_snprintf(buffer, size, "%x%08x", address_hi, rt_lower_32_bits(address));
+    }
+    else
+    {
+        rt_snprintf(buffer, size, "%x", rt_lower_32_bits(address));
+    }
+}
+
 static void ofw_device_rename(struct rt_device *dev)
 {
     rt_uint32_t mask;
@@ -58,18 +75,21 @@ static void ofw_device_rename(struct rt_device *dev)
     {
         if (!rt_ofw_get_address(np, 0, &addr, RT_NULL))
         {
+            char addr_str[sizeof(addr) * 2 + 1];
             const char *node_name = rt_fdt_node_name(np->full_name);
             rt_size_t tag_len = strchrnul(node_name, '@') - node_name;
 
+            ofw_address_to_string(addr_str, sizeof(addr_str), addr);
+
             if (!rt_ofw_prop_read_u32(np, "mask", &mask))
             {
-                rt_dm_dev_set_name(dev, dev_name ? "%lx.%x.%.*s:%s" : "%lx.%x.%.*s",
-                    addr, __rt_ffs(mask) - 1, tag_len, node_name, dev_name);
+                rt_dm_dev_set_name(dev, dev_name ? "%s.%x.%.*s:%s" : "%s.%x.%.*s",
+                    addr_str, __rt_ffs(mask) - 1, tag_len, node_name, dev_name);
             }
             else
             {
-                rt_dm_dev_set_name(dev, dev_name ? "%lx.%.*s:%s" : "%lx.%.*s",
-                    addr, tag_len, node_name, dev_name);
+                rt_dm_dev_set_name(dev, dev_name ? "%s.%.*s:%s" : "%s.%.*s",
+                    addr_str, tag_len, node_name, dev_name);
             }
 
             return;
@@ -92,9 +112,7 @@ static struct rt_platform_device *alloc_ofw_platform_device(struct rt_ofw_node *
         rt_ofw_node_get(np);
         rt_ofw_node_set_flag(np, RT_OFW_F_PLATFORM);
 
-#ifdef RT_USING_OFW
         pdev->parent.ofw_node = np;
-#endif
 
         ofw_device_rename(&pdev->parent);
     }
@@ -117,6 +135,12 @@ static rt_err_t platform_ofw_device_probe_once(struct rt_ofw_node *parent_np)
         const char *name;
         struct rt_ofw_node_id *id;
         struct rt_ofw_prop *compat_prop = RT_NULL;
+
+        if (np->dev)
+        {
+            /* Check first */
+            continue;
+        }
 
         LOG_D("%s found in %s", np->full_name, parent_np->full_name);
 
@@ -152,6 +176,12 @@ static rt_err_t platform_ofw_device_probe_once(struct rt_ofw_node *parent_np)
             }
         }
 
+        if (np->dev)
+        {
+            /* Maybe the childs have requested this node */
+            continue;
+        }
+
         pdev = alloc_ofw_platform_device(np);
 
         if (!pdev)
@@ -163,6 +193,7 @@ static rt_err_t platform_ofw_device_probe_once(struct rt_ofw_node *parent_np)
         }
 
         pdev->dev_id = ofw_alias_node_id(np);
+        np->dev = &pdev->parent;
         LOG_D("%s register to bus", np->full_name);
 
         rt_platform_device_register(pdev);
@@ -201,6 +232,69 @@ rt_err_t rt_platform_ofw_device_probe_child(struct rt_ofw_node *np)
     return err;
 }
 
+rt_err_t rt_platform_ofw_request(struct rt_ofw_node *np)
+{
+    rt_err_t err;
+
+    if (np)
+    {
+        struct rt_device *dev = np->dev;
+
+        if (dev)
+        {
+            /*
+             * Device was already created (np->dev != NULL).
+             * - If it's already probed (dev->drv != NULL), nothing to do.
+             * - Retry only devices created by the OFW platform scanner. Other
+             *   devices belong to their native bus (e.g. I2C/SPI) and must not
+             *   be transferred to or probed through the platform bus.
+             */
+            if (!dev->drv && rt_ofw_node_test_flag(np, RT_OFW_F_PLATFORM))
+            {
+                err = rt_bus_probe_device(dev);
+            }
+            else
+            {
+                err = RT_EOK;
+            }
+        }
+        else
+        {
+            struct rt_ofw_node_id *id;
+            struct rt_platform_device *pdev = alloc_ofw_platform_device(np);
+
+            if (pdev)
+            {
+                pdev->dev_id = ofw_alias_node_id(np);
+                np->dev = &pdev->parent;
+                LOG_D("%s register to bus", np->full_name);
+
+                err = rt_platform_device_register(pdev);
+
+                if (!err && np->child && (id = rt_ofw_node_match(np, platform_ofw_ids)))
+                {
+                    rt_err_t sub_err;
+
+                    if ((sub_err = platform_ofw_device_probe_once(np)))
+                    {
+                        LOG_W("%s child platform device probe failed", np->full_name);
+                    }
+                }
+            }
+            else
+            {
+                err = -RT_ENOMEM;
+            }
+        }
+    }
+    else
+    {
+        err = -RT_EINVAL;
+    }
+
+    return err;
+}
+
 static int platform_ofw_device_probe(void)
 {
     rt_err_t err = RT_EOK;
@@ -208,6 +302,14 @@ static int platform_ofw_device_probe(void)
 
     if (ofw_node_root)
     {
+        if ((node = rt_ofw_find_node_by_path("/clocks")))
+        {
+            platform_ofw_device_probe_once(node);
+            rt_ofw_node_put(node);
+        }
+
+        rt_ofw_node_get(ofw_node_root);
+
         err = platform_ofw_device_probe_once(ofw_node_root);
 
         rt_ofw_node_put(ofw_node_root);
@@ -218,11 +320,13 @@ static int platform_ofw_device_probe(void)
             rt_ofw_node_put(node);
         }
 
+        rt_ofw_node_get(ofw_node_chosen);
         if ((node = rt_ofw_get_child_by_compatible(ofw_node_chosen, "simple-framebuffer")))
         {
             platform_ofw_device_probe_once(node);
             rt_ofw_node_put(node);
         }
+        rt_ofw_node_get(ofw_node_chosen);
     }
     else
     {
@@ -232,3 +336,27 @@ static int platform_ofw_device_probe(void)
     return (int)err;
 }
 INIT_PLATFORM_EXPORT(platform_ofw_device_probe);
+
+rt_err_t rt_platform_ofw_free(struct rt_platform_device *pdev)
+{
+    rt_err_t err = RT_EOK;
+
+    if (pdev)
+    {
+        struct rt_ofw_node *np = pdev->parent.ofw_node;
+
+        if (np)
+        {
+            rt_ofw_node_clear_flag(np, RT_OFW_F_PLATFORM);
+            rt_ofw_node_put(np);
+
+            rt_free(pdev);
+        }
+    }
+    else
+    {
+        err = -RT_EINVAL;
+    }
+
+    return err;
+}

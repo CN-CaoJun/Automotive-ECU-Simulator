@@ -1,0 +1,59 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Boot (build + flash + OpenOCD)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "openocd",
+            "serverpath": "E:/tools/OpenOCD-20260302-0.12.0/bin/openocd.exe",
+            "gdbPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin/arm-none-eabi-gdb.exe",
+            "armToolchainPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin",
+            "cwd": "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Scripts/openocd-scripts",
+            "executable": "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Boot/build/RTThread-Boot.elf",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/stm32h7x.cfg",
+                "debug_boot.cfg"
+            ],
+            "device": "STM32H750VBTx",
+            "interface": "swd",
+            "loadFiles": [],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Prepare Boot Debug",
+            "preLaunchCommands": [
+                "set breakpoint auto-hw on",
+                "set mem inaccessible-by-default off"
+            ],
+            "svdFile": "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Docs/STM32H750x.svd",
+            "showDevDebugOutput": "none"
+        },
+        {
+            "name": "Debug App (build + flash + OpenOCD)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "openocd",
+            "serverpath": "E:/tools/OpenOCD-20260302-0.12.0/bin/openocd.exe",
+            "gdbPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin/arm-none-eabi-gdb.exe",
+            "armToolchainPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin",
+            "cwd": "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Scripts/openocd-scripts",
+            "executable": "${workspaceFolder}/H750VBT6_Simulated_AutoNode/App/build/Simulated-GW-ECU.elf",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/stm32h7x_extern.cfg",
+                "debug_app.cfg"
+            ],
+            "device": "STM32H750VBTx",
+            "interface": "swd",
+            "loadFiles": [],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Prepare App Debug",
+            "preLaunchCommands": [
+                "set breakpoint auto-hw on",
+                "set mem inaccessible-by-default off"
+            ],
+            "svdFile": "${workspaceFolder}/H750VBT6_Simulated_AutoNode/Docs/STM32H750x.svd",
+            "showDevDebugOutput": "none"
+        }
+    ]
+}

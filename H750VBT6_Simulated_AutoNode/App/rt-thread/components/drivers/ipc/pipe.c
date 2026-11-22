@@ -10,6 +10,8 @@
  * 2023-06-28     shell        return POLLHUP when writer closed its channel on poll()
  *                             fix flag test on pipe_fops_open()
  * 2023-12-02     shell        Make read pipe operation interruptable.
+ * 2026-11-02     seteiro      pipe ioctl: copy FIONREAD/FIONWRITE via lwp_put_to_user
+ * 2026-11-04     seteiro      pipe ioctl: skip LWP copyout for kernel callers (lwp_self()==NULL)
  */
 #include <rthw.h>
 #include <rtdevice.h>
@@ -24,6 +26,9 @@
 #include <sys/ioctl.h>
 #include <dfs_file.h>
 #include <resource_id.h>
+#ifdef RT_USING_LWP
+#include <lwp_user_mm.h>
+#endif
 
 /* check RT_UNAMED_PIPE_NUMBER */
 
@@ -190,14 +195,36 @@ static int pipe_fops_ioctl(struct dfs_file *fd, int cmd, void *args)
 
     pipe = (rt_pipe_t *)fd->vnode->data;
 
-    switch (cmd)
+    if (args == RT_NULL || pipe == RT_NULL || pipe->fifo == RT_NULL)
+    {
+        return -EINVAL;
+    }
+
+    switch ((rt_ubase_t)cmd)
     {
     case FIONREAD:
-        *((int*)args) = rt_ringbuffer_data_len(pipe->fifo);
-        break;
     case FIONWRITE:
-        *((int*)args) = rt_ringbuffer_space_len(pipe->fifo);
+    {
+        int value = (cmd == FIONREAD)
+                        ? (int)rt_ringbuffer_data_len(pipe->fifo)
+                        : (int)rt_ringbuffer_space_len(pipe->fifo);
+#ifdef RT_USING_LWP
+        if (lwp_self() != RT_NULL)
+        {
+            if (!lwp_user_accessable(args, sizeof(value)))
+            {
+                return -EFAULT;
+            }
+            if (lwp_put_to_user(args, &value, sizeof(value)) != sizeof(value))
+            {
+                return -EFAULT;
+            }
+            break;
+        }
+#endif
+        *(int *)args = value;
         break;
+    }
     default:
         ret = -EINVAL;
         break;
@@ -557,7 +584,7 @@ rt_ssize_t rt_pipe_write(rt_device_t device, rt_off_t pos, const void *buffer, r
     }
 
     pbuf = (uint8_t*)buffer;
-    rt_mutex_take(&pipe->lock, -1);
+    rt_mutex_take(&pipe->lock, RT_WAITING_FOREVER);
 
     while (write_bytes < count)
     {
@@ -619,6 +646,14 @@ rt_pipe_t *rt_pipe_create(const char *name, int bufsz)
     rt_pipe_t *pipe;
     rt_device_t dev;
 
+    RT_ASSERT(name != RT_NULL);
+    RT_ASSERT(bufsz < 0xFFFF);
+
+    if (rt_device_find(name) != RT_NULL)
+    {
+        /* pipe device has been created */
+        return RT_NULL;
+    }
     pipe = (rt_pipe_t *)rt_malloc(sizeof(rt_pipe_t));
     if (pipe == RT_NULL) return RT_NULL;
 
@@ -635,7 +670,6 @@ rt_pipe_t *rt_pipe_create(const char *name, int bufsz)
     pipe->writer = 0;
     pipe->reader = 0;
 
-    RT_ASSERT(bufsz < 0xFFFF);
     pipe->bufsz = bufsz;
 
     dev = &pipe->parent;
@@ -654,15 +688,8 @@ rt_pipe_t *rt_pipe_create(const char *name, int bufsz)
     dev->rx_indicate = RT_NULL;
     dev->tx_complete = RT_NULL;
 
-    if (rt_device_register(&pipe->parent, name, RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_REMOVABLE) != 0)
-    {
-        rt_mutex_detach(&pipe->lock);
-#if defined(RT_USING_POSIX_DEVIO) && defined(RT_USING_POSIX_PIPE)
-        resource_id_put(&id_mgr, pipe->pipeno);
-#endif
-        rt_free(pipe);
-        return RT_NULL;
-    }
+    rt_device_register(&pipe->parent, name, RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_REMOVABLE);
+
 #if defined(RT_USING_POSIX_DEVIO) && defined(RT_USING_POSIX_PIPE)
     dev->fops = (void *)&pipe_fops;
 #endif
@@ -762,13 +789,15 @@ int pipe(int fildes[2])
     fildes[1] = open(dev_name, O_WRONLY, 0);
     if (fildes[1] < 0)
     {
-        close(fildes[0]);
+        rt_pipe_delete(dname);
         return -1;
     }
 
     fildes[0] = open(dev_name, O_RDONLY, 0);
     if (fildes[0] < 0)
     {
+        close(fildes[1]);
+        rt_pipe_delete(dname);
         return -1;
     }
 

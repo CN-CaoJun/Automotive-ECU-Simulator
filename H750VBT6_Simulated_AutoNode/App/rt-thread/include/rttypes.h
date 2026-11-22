@@ -32,9 +32,13 @@ extern "C" {
  * RT-Thread basic data types definition
  */
 
+#if defined(_WIN64) || defined(__x86_64__)
+#ifndef ARCH_CPU_64BIT
+#define ARCH_CPU_64BIT
+#endif // ARCH_CPU_64BIT
+#endif // defined(_WIN64) || defined(__x86_64__)
+
 typedef int                             rt_bool_t;      /**< boolean type */
-typedef signed long                     rt_base_t;      /**< Nbit CPU related date type */
-typedef unsigned long                   rt_ubase_t;     /**< Nbit unsigned CPU related data type */
 
 #ifndef RT_USING_ARCH_DATA_TYPE
 #ifdef RT_USING_LIBC
@@ -63,32 +67,56 @@ typedef unsigned long long              rt_uint64_t;    /**< 64bit unsigned inte
 #endif /* RT_USING_LIBC */
 #endif /* RT_USING_ARCH_DATA_TYPE */
 
+#ifdef ARCH_CPU_64BIT
+typedef rt_int64_t                      rt_base_t;      /**< Nbit CPU related data type */
+typedef rt_uint64_t                     rt_ubase_t;     /**< Nbit unsigned CPU related data type */
+#else
+typedef rt_int32_t                      rt_base_t;      /**< Nbit CPU related data type */
+typedef rt_uint32_t                     rt_ubase_t;     /**< Nbit unsigned CPU related data type */
+#endif
+
 #if defined(RT_USING_LIBC) && !defined(RT_USING_NANO)
 typedef size_t                          rt_size_t;      /**< Type for size number */
 typedef ssize_t                         rt_ssize_t;     /**< Used for a count of bytes or an error indication */
+typedef intptr_t                        rt_intptr_t;    /**< Type for signed pointer length integer */
+typedef uintptr_t                       rt_uintptr_t;   /**< Type for unsigned pointer length integer */
 #else
 typedef rt_ubase_t                      rt_size_t;      /**< Type for size number */
 typedef rt_base_t                       rt_ssize_t;     /**< Used for a count of bytes or an error indication */
+typedef rt_base_t                      rt_intptr_t;    /**< Type for signed pointer length integer */
+typedef rt_ubase_t                       rt_uintptr_t;   /**< Type for unsigned pointer length integer */
 #endif /* defined(RT_USING_LIBC) && !defined(RT_USING_NANO) */
 
 typedef rt_base_t                       rt_err_t;       /**< Type for error number */
-typedef rt_uint32_t                     rt_time_t;      /**< Type for time stamp */
 typedef rt_uint32_t                     rt_tick_t;      /**< Type for tick count */
 typedef rt_base_t                       rt_flag_t;      /**< Type for flags */
 typedef rt_ubase_t                      rt_dev_t;       /**< Type for device */
 typedef rt_base_t                       rt_off_t;       /**< Type for offset */
 
+#if defined(RT_USING_STDC_ATOMIC) && __STDC_VERSION__ < 201112L
+#undef RT_USING_STDC_ATOMIC
+#warning Not using C11 or beyond! Maybe you should change the -std option on your compiler
+#endif
+
 #ifdef __cplusplus
-typedef rt_ubase_t rt_atomic_t;
+    typedef rt_uint8_t rt_atomic8_t;
+    typedef rt_uint16_t rt_atomic16_t;
+    typedef rt_base_t rt_atomic_t;
 #else
-#if defined(RT_USING_HW_ATOMIC)
-typedef rt_ubase_t rt_atomic_t;
-#elif defined(RT_USING_STDC_ATOMIC)
-#include <stdatomic.h>
-        typedef atomic_intptr_t rt_atomic_t;
-#else
-typedef rt_ubase_t rt_atomic_t;
-#endif /* RT_USING_STDC_ATOMIC */
+    #if defined(RT_USING_STDC_ATOMIC)
+        #include <stdatomic.h>
+        typedef _Atomic(rt_uint8_t) rt_atomic8_t;
+        typedef _Atomic(rt_uint16_t) rt_atomic16_t;
+        typedef _Atomic(rt_base_t) rt_atomic_t;
+    #elif defined(RT_USING_HW_ATOMIC)
+        typedef rt_uint8_t rt_atomic8_t;
+        typedef rt_uint16_t rt_atomic16_t;
+        typedef rt_base_t rt_atomic_t;
+    #else
+        typedef rt_uint8_t rt_atomic8_t;
+        typedef rt_uint16_t rt_atomic16_t;
+        typedef rt_base_t rt_atomic_t;
+    #endif /* RT_USING_STDC_ATOMIC */
 #endif /* __cplusplus */
 
 /* boolean type definitions */
@@ -118,6 +146,15 @@ struct rt_slist_node
 typedef struct rt_slist_node rt_slist_t;                /**< Type for single list. */
 
 /**
+ * Lock-less Single List structure
+ */
+struct rt_lockless_slist_node
+{
+    rt_atomic_t next;                                   /**< point to next node. */
+};
+typedef struct rt_lockless_slist_node rt_ll_slist_t;    /**< Type for lock-les single list. */
+
+/**
  * Spinlock
  */
 #ifdef RT_USING_SMP
@@ -135,63 +172,73 @@ struct rt_spinlock
 #endif /* RT_DEBUGING_SPINLOCK */
 };
 
-#ifdef RT_DEBUGING_SPINLOCK
+#ifndef RT_SPINLOCK_INIT
+#define RT_SPINLOCK_INIT {{0}} /* can be overridden by cpuport.h */
+#endif /* RT_SPINLOCK_INIT */
 
-#define __OWNER_MAGIC ((void *)0xdeadbeaf)
+#else /* !RT_USING_SMP */
 
-#if defined(__GNUC__)
-#define __GET_RETURN_ADDRESS __builtin_return_address(0)
-#else
-#define __GET_RETURN_ADDRESS RT_NULL
-#endif
-
-#define _SPIN_LOCK_DEBUG_OWNER(lock)                  \
-    do                                                \
-    {                                                 \
-        struct rt_thread *_curthr = rt_thread_self(); \
-        if (_curthr != RT_NULL)                       \
-        {                                             \
-            (lock)->owner = _curthr;                  \
-            (lock)->pc = __GET_RETURN_ADDRESS;        \
-        }                                             \
-    } while (0)
-
-#define _SPIN_UNLOCK_DEBUG_OWNER(lock) \
-    do                                 \
-    {                                  \
-        (lock)->owner = __OWNER_MAGIC; \
-        (lock)->pc = RT_NULL;          \
-    } while (0)
-
-#else
-
-#define _SPIN_LOCK_DEBUG_OWNER(lock)
-#define _SPIN_UNLOCK_DEBUG_OWNER(lock)
-#endif
-
+struct rt_spinlock
+{
 #ifdef RT_USING_DEBUG
+    rt_uint32_t critical_level;
+#endif /* RT_USING_DEBUG */
+    rt_ubase_t lock;
+};
+#define RT_SPINLOCK_INIT {0}
+#endif /* RT_USING_SMP */
+#if defined(RT_DEBUGING_SPINLOCK) && defined(RT_USING_SMP)
 
-#define _SPIN_LOCK_DEBUG_CRITICAL(lock)                   \
-    do                                                    \
-    {                                                     \
-        struct rt_thread *_curthr = rt_thread_self();     \
-        if (_curthr != RT_NULL)                           \
+    #define __OWNER_MAGIC ((void *)0xdeadbeaf)
+
+    #if defined(__GNUC__)
+    #define __GET_RETURN_ADDRESS __builtin_return_address(0)
+    #else /* !__GNUC__ */
+    #define __GET_RETURN_ADDRESS RT_NULL
+    #endif /* __GNUC__ */
+
+    #define _SPIN_LOCK_DEBUG_OWNER(lock)                  \
+        do                                                \
+        {                                                 \
+            struct rt_thread *_curthr = rt_thread_self(); \
+            if (_curthr != RT_NULL)                       \
+            {                                             \
+                (lock)->owner = _curthr;                  \
+                (lock)->pc = __GET_RETURN_ADDRESS;        \
+            }                                             \
+        } while (0)
+
+    #define _SPIN_UNLOCK_DEBUG_OWNER(lock) \
+        do                                 \
+        {                                  \
+            (lock)->owner = __OWNER_MAGIC; \
+            (lock)->pc = RT_NULL;          \
+        } while (0)
+
+#else /* !RT_DEBUGING_SPINLOCK */
+
+    #define _SPIN_LOCK_DEBUG_OWNER(lock)    RT_UNUSED(lock)
+    #define _SPIN_UNLOCK_DEBUG_OWNER(lock)  RT_UNUSED(lock)
+#endif /* RT_DEBUGING_SPINLOCK */
+
+#ifdef RT_DEBUGING_CRITICAL
+    #define _SPIN_LOCK_DEBUG_CRITICAL(lock)               \
+        do                                                \
         {                                                 \
             (lock)->critical_level = rt_critical_level(); \
-        }                                                 \
-    } while (0)
+        } while (0)
 
-#define _SPIN_UNLOCK_DEBUG_CRITICAL(lock, critical) \
-    do                                              \
-    {                                               \
-        (critical) = (lock)->critical_level;        \
-    } while (0)
+    #define _SPIN_UNLOCK_DEBUG_CRITICAL(lock, critical) \
+        do                                              \
+        {                                               \
+            (critical) = (lock)->critical_level;        \
+        } while (0)
 
-#else
+#else /* !RT_DEBUGING_CRITICAL */
+    #define _SPIN_LOCK_DEBUG_CRITICAL(lock)             RT_UNUSED(lock)
+    #define _SPIN_UNLOCK_DEBUG_CRITICAL(lock, critical) do {critical = 0; RT_UNUSED(lock);} while (0)
 
-#define _SPIN_LOCK_DEBUG_CRITICAL(lock)
-#define _SPIN_UNLOCK_DEBUG_CRITICAL(lock, critical) (critical = 0)
-#endif /* RT_USING_DEBUG */
+#endif /* RT_DEBUGING_CRITICAL */
 
 #define RT_SPIN_LOCK_DEBUG(lock)         \
     do                                   \
@@ -206,22 +253,6 @@ struct rt_spinlock
         _SPIN_UNLOCK_DEBUG_OWNER(lock);              \
         _SPIN_UNLOCK_DEBUG_CRITICAL(lock, critical); \
     } while (0)
-
-#ifndef RT_SPINLOCK_INIT
-#define RT_SPINLOCK_INIT {{0}} /* can be overridden by cpuport.h */
-#endif /* RT_SPINLOCK_INIT */
-
-#else
-
-struct rt_spinlock
-{
-#ifdef RT_USING_DEBUG
-    rt_uint32_t critical_level;
-#endif /* RT_USING_DEBUG */
-    rt_ubase_t lock;
-};
-#define RT_SPINLOCK_INIT {0}
-#endif /* RT_USING_SMP */
 
 typedef struct rt_spinlock rt_spinlock_t;
 

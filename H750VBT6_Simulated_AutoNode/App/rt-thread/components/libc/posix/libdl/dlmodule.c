@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2024 RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -24,7 +24,7 @@
 
 #define DBG_TAG    "DLMD"
 #define DBG_LVL    DBG_INFO
-#include <rtdbg.h>          // must after of DEBUG_ENABLE or some other options
+#include <rtdbg.h>          /* must after of DEBUG_ENABLE or some other options*/
 
 static struct rt_module_symtab *_rt_module_symtab_begin = RT_NULL;
 static struct rt_module_symtab *_rt_module_symtab_end   = RT_NULL;
@@ -33,32 +33,79 @@ static struct rt_module_symtab *_rt_module_symtab_end   = RT_NULL;
     #pragma section="RTMSymTab"
 #endif
 
-/* set the name of module */
-static void _dlmodule_set_name(struct rt_dlmodule *module, const char *path)
+/**
+ * @brief  Extract module name from a file path by stripping directory and extension.
+ *
+ * @param  path the file path (e.g., "/mnt/sdcard/apps/clock.so")
+ * @param  name buffer to store the extracted module name
+ * @param  name_size size of the name buffer
+ *
+ * @note   This function extracts the base name without path and extension.
+ *         Examples:
+ *         - "/mnt/sdcard/apps/clock.so" -> "clock"
+ *         - "/mnt/v1.2/app.so" -> "app" (dots in path are ignored)
+ *         - ".hidden" -> ".hidden" (hidden files without extension)
+ *         - ".hidden.so" -> ".hidden" (hidden files with extension)
+ */
+void dlmodule_extract_name(const char *path, char *name, int name_size)
 {
     int size;
-    struct rt_object *object;
-    const char *first, *end, *ptr;
+    const char *first, *end, *ptr, *last_dot;
 
-    object = &(module->parent);
-    ptr   = first = (char *)path;
-    end   = path + rt_strlen(path);
+    RT_ASSERT(path != RT_NULL);
+    RT_ASSERT(name != RT_NULL);
+    RT_ASSERT(name_size > 0);
 
+    ptr = first = path;
+    end = path + rt_strlen(path);
+
+    /* find the start of filename (after last '/') */
     while (*ptr != '\0')
     {
         if (*ptr == '/')
             first = ptr + 1;
-        if (*ptr == '.')
-            end = ptr - 1;
-
-        ptr ++;
+        ptr++;
     }
 
-    size = end - first + 1;
-    if (size > RT_NAME_MAX) size = RT_NAME_MAX;
+    /* find last extension in filename portion only (after last '/') */
+    last_dot = RT_NULL;
+    ptr = first;
+    while (*ptr != '\0')
+    {
+        if (*ptr == '.')
+            last_dot = ptr;
+        ptr++;
+    }
 
-    rt_strncpy(object->name, first, size);
-    object->name[size] = '\0';
+    /* determine end position for module name */
+    if (last_dot != RT_NULL && last_dot != first)
+    {
+        /* extension found (dot not at start of filename), strip it */
+        end = last_dot;
+    }
+    /* else: no extension, or filename starts with dot only (e.g., ".hidden"),
+     * use entire filename */
+
+    size = end - first;
+    if (size <= 0)
+    {
+        /* defensive: empty path or path ending with "/" */
+        size = rt_strlen(first);
+    }
+    if (size >= name_size)
+        size = name_size - 1;
+
+    rt_strncpy(name, first, size);
+    name[size] = '\0';
+}
+
+/* set the name of module */
+static void _dlmodule_set_name(struct rt_dlmodule *module, const char *path)
+{
+    struct rt_object *object;
+
+    object = &(module->parent);
+    dlmodule_extract_name(path, object->name, RT_NAME_MAX);
 }
 
 #define RT_MODULE_ARG_MAX    8
@@ -128,8 +175,8 @@ static void _dlmodule_exit(void)
                 rt_thread_t thread = (rt_thread_t)object;
 
                 /* stop timer and suspend thread*/
-                if ((thread->stat & RT_THREAD_STAT_MASK) != RT_THREAD_CLOSE &&
-                    (thread->stat & RT_THREAD_STAT_MASK) != RT_THREAD_INIT)
+                if ((RT_SCHED_CTX(thread).stat & RT_THREAD_STAT_MASK) != RT_THREAD_CLOSE &&
+                    (RT_SCHED_CTX(thread).stat & RT_THREAD_STAT_MASK) != RT_THREAD_INIT)
                 {
                     rt_timer_stop(&(thread->thread_timer));
                     rt_thread_suspend(thread);
@@ -176,6 +223,11 @@ __exit:
     return ;
 }
 
+/**
+ * @brief create a dynamic module object and initialize it.
+ *
+ * @return struct rt_dlmodule* If module create successfully, return the pointer to its rt_dlmodule structure.
+ */
 struct rt_dlmodule *dlmodule_create(void)
 {
     struct rt_dlmodule *module = RT_NULL;
@@ -202,18 +254,10 @@ void dlmodule_destroy_subthread(struct rt_dlmodule *module, rt_thread_t thread)
     /* lock scheduler to prevent scheduling in cleanup function. */
     rt_enter_critical();
 
-    /* remove thread from thread_list (ready or defunct thread list) */
+    rt_thread_close(thread);
+
+    /* remove thread from thread_list (defunct thread list) */
     rt_list_remove(&RT_THREAD_LIST_NODE(thread));
-
-    if ((thread->stat & RT_THREAD_STAT_MASK) != RT_THREAD_CLOSE &&
-        (thread->thread_timer.parent.type == (RT_Object_Class_Static | RT_Object_Class_Timer)))
-    {
-        /* release thread timer */
-        rt_timer_detach(&(thread->thread_timer));
-    }
-
-    /* change stat */
-    thread->stat = RT_THREAD_CLOSE;
 
     /* invoke thread cleanup */
     if (thread->cleanup != RT_NULL)
@@ -241,6 +285,12 @@ void dlmodule_destroy_subthread(struct rt_dlmodule *module, rt_thread_t thread)
 #endif
 }
 
+/**
+ * @brief destroy dynamic module and cleanup all kernel objects inside it.
+ *
+ * @param module Pointer to the module to be destroyed.
+ * @return rt_err_t  On success, it returns RT_EOK. Otherwise, it returns the error code.
+ */
 rt_err_t dlmodule_destroy(struct rt_dlmodule* module)
 {
     int i;
@@ -263,7 +313,7 @@ rt_err_t dlmodule_destroy(struct rt_dlmodule* module)
         rt_exit_critical();
     }
 
-    // list_object(&(module->object_list));
+    /* list_object(&(module->object_list));*/
 
     /* cleanup for all kernel objects inside module*/
     {
@@ -401,6 +451,11 @@ rt_err_t dlmodule_destroy(struct rt_dlmodule* module)
     return RT_EOK;
 }
 
+/**
+ * @brief retrieve the dynamically loaded module that the current thread belongs to.
+ *
+ * @return struct rt_dlmodule* On success, it returns a pointer to the module. otherwise, it returns RT_NULL.
+ */
 struct rt_dlmodule *dlmodule_self(void)
 {
     rt_thread_t tid;
@@ -423,6 +478,20 @@ struct rt_dlmodule *rt_module_self(void)
     return dlmodule_self();
 }
 
+/**
+ * @brief load an ELF module to memory.
+ *
+ * @param filename the path to the module to load.
+ * @return struct rt_dlmodule* On success, it returns a pointer to the module object. otherwise, RT_NULL is returned.
+ *
+ * @note the function is used to load an ELF (Executable and Linkable Format) module from a file, validate it,
+ *       and initialize it as a dynamically loaded module. what it implements are as follows:
+ *       1. Load and Validate ELF: It loads an ELF file, checks its validity, and identifies it as either a relocatable or shared object.
+ *       2. Memory Allocation and Cleanup: Uses rt_malloc and rt_free to allocate and free memory for module data.
+ *          Error handling ensures all resources are released if an error occurs.
+ *       3. Symbol Resolution and Initialization: Sets up init function and cleanup function, and calls the module_init function if it is present.
+ *       4. Cache Management: Optionally (when RT_USING_CACHE defined) flushes data and invalidates instruction caches to ensure the module is correctly loaded into memory.
+ */
 struct rt_dlmodule* dlmodule_load(const char* filename)
 {
 #ifdef RT_USING_POSIX_FS
@@ -533,6 +602,14 @@ __exit:
     return RT_NULL;
 }
 
+/**
+ * @brief load a dynamic module, and create a thread to excute the module main function.
+ *
+ * @param pgname path of the module to be loaded.
+ * @param cmd the command string (with commandline options) for startup module.
+ * @param cmd_size the command's length.
+ * @return struct rt_dlmodule* On success, it returns a pointer to the module object. otherwise, RT_NULL is returned.
+ */
 struct rt_dlmodule* dlmodule_exec(const char* pgname, const char* cmd, int cmd_size)
 {
     struct rt_dlmodule *module = RT_NULL;
@@ -750,6 +827,17 @@ struct rt_dlmodule* dlmodule_exec_custom(const char* pgname, const char* cmd, in
 }
 #endif
 
+/**
+ * @brief exit a dynamically loaded module.
+ *
+ * @param ret_code the return code for module exit.
+ *
+ * @note this function is responsible for gracefully exiting a dynamically loaded module, releasing resources associated with the module,
+ *       and handling cleanup operations. what it implements are as follows:
+ *       1. Thread and Resource Cleanup: The function safely exits a module by deleting its main thread and freeing resources associated with it.
+ *       2. Status Management: Checks and updates the module's state, setting a return code and calling _dlmodule_exit() to transition to a closing state.
+ *       3. Critical Sections: Critical sections ensure that the exit process is atomic and free from race conditions.
+ */
 void dlmodule_exit(int ret_code)
 {
     rt_thread_t thread;
@@ -778,7 +866,7 @@ void dlmodule_exit(int ret_code)
     /* the stat of module was changed to CLOSING in _dlmodule_exit */
 
     thread = module->main_thread;
-    if ((thread->stat & RT_THREAD_STAT_MASK) == RT_THREAD_CLOSE)
+    if ((RT_SCHED_CTX(thread).stat & RT_THREAD_STAT_MASK) == RT_THREAD_CLOSE)
     {
         /* main thread already closed */
         rt_exit_critical();
@@ -792,7 +880,14 @@ void dlmodule_exit(int ret_code)
     rt_exit_critical();
 }
 
-rt_uint32_t dlmodule_symbol_find(const char *sym_str)
+/**
+ * @brief search for a symbol by its name in the kernel symbol table.
+ *
+ * @param sym_str the symbol name string.
+ * @return rt_ubase_t On success, it returns the address of the symbol.
+ *         Otherwise, it returns 0 (indicating the symbol was not found).
+ */
+rt_ubase_t dlmodule_symbol_find(const char *sym_str)
 {
     /* find in kernel symbol table */
     struct rt_module_symtab *index;
@@ -800,7 +895,7 @@ rt_uint32_t dlmodule_symbol_find(const char *sym_str)
     for (index = _rt_module_symtab_begin; index != _rt_module_symtab_end; index ++)
     {
         if (rt_strcmp(index->name, sym_str) == 0)
-            return (rt_uint32_t)index->addr;
+            return (rt_ubase_t)index->addr;
     }
 
     return 0;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2023, RT-Thread Development Team
+ * Copyright (c) 2006-2024 RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -22,7 +22,7 @@
 #endif
 
 /**
- * @addtogroup FsPosixApi
+ * @addtogroup group_fs_posix_api
  * @{
  */
 
@@ -31,7 +31,17 @@
  * return a file descriptor according specified flags.
  *
  * @param file the path name of file.
- * @param flags the file open flags.
+ * @param flags the file open flags. Common values include:
+ *     - Access modes (mutually exclusive):
+ *         - `O_RDONLY`: Open for read-only access.
+ *         - `O_WRONLY`: Open for write-only access.
+ *         - `O_RDWR`: Open for both reading and writing.
+ *     - File status flags (can be combined with bitwise OR `|`):
+ *         - `O_CREAT`: Create the file if it does not exist. Requires a `mode` argument.
+ *         - `O_TRUNC`: Truncate the file to zero length if it already exists.
+ *         - `O_APPEND`: Append writes to the end of the file.
+ *         - `O_EXCL`: Ensure that `O_CREAT` creates the file exclusively.
+ *         - Other platform-specific flags
  *
  * @return the non-negative integer on successful open, others for failed.
  */
@@ -81,6 +91,22 @@ RTM_EXPORT(open);
 #ifndef AT_FDCWD
 #define AT_FDCWD (-100)
 #endif
+
+/**
+ * @brief Opens a file relative to a directory file descriptor.
+ *
+ * @param dirfd The file descriptor of the directory to base the relative path on.
+ * @param path The path to the file to be opened, relative to the directory specified by `dirfd`.
+ *                 Can be an absolute path (in which case `dirfd` is ignored).
+ * @param flag File access and status flags (e.g., `O_RDONLY`, `O_WRONLY`, `O_CREAT`).
+ *
+ * @return On success, returns a new file descriptor for the opened file.
+ *         On failure, returns `-1` and sets `errno` to indicate the error.
+ *
+ * @note When using relative paths, ensure `dirfd` is a valid directory descriptor.
+ *       When `pathname` is absolute, the `dirfd` argument is ignored.
+ *
+ */
 int openat(int dirfd, const char *path, int flag, ...)
 {
     struct dfs_file *d;
@@ -93,7 +119,7 @@ int openat(int dirfd, const char *path, int flag, ...)
         return -1;
     }
 
-    fullpath = (char*)path;
+    fullpath = (char *)path;
 
     if (path[0] != '/')
     {
@@ -131,9 +157,10 @@ int utimensat(int __fd, const char *__path, const struct timespec __times[2], in
     struct stat buffer;
     struct dfs_file *d;
     char *fullpath;
+    char *allocated_path = RT_NULL;
     struct dfs_attr attr;
     time_t current_time;
-    char *link_fn = (char *)rt_malloc(DFS_PATH_MAX);
+    char *link_fn = RT_NULL;
     int err;
 
     if (__path == NULL)
@@ -149,7 +176,7 @@ int utimensat(int __fd, const char *__path, const struct timespec __times[2], in
         }
         else
         {
-            fullpath = (char*)__path;
+            fullpath = (char *)__path;
         }
     }
     else
@@ -162,16 +189,17 @@ int utimensat(int __fd, const char *__path, const struct timespec __times[2], in
                 return -EBADF;
             }
 
-            fullpath = dfs_dentry_full_path(d->dentry);
-            if (!fullpath)
+            allocated_path = dfs_dentry_full_path(d->dentry);
+            if (!allocated_path)
             {
                 rt_set_errno(-ENOMEM);
                 return -1;
             }
+            fullpath = allocated_path;
         }
     }
 
-    //update time
+    /*update time*/
     attr.ia_valid = ATTR_ATIME_SET | ATTR_MTIME_SET;
     time(&current_time);
     if (UTIME_NOW == __times[0].tv_nsec)
@@ -191,7 +219,7 @@ int utimensat(int __fd, const char *__path, const struct timespec __times[2], in
     {
         attr.ia_mtime.tv_sec = current_time;
     }
-    else if (UTIME_OMIT == __times[1].tv_nsec)
+    else if (UTIME_OMIT != __times[1].tv_nsec)
     {
         attr.ia_mtime.tv_sec = __times[1].tv_sec;
     }
@@ -204,30 +232,35 @@ int utimensat(int __fd, const char *__path, const struct timespec __times[2], in
     {
         if (S_ISLNK(buffer.st_mode) && (__flags != AT_SYMLINK_NOFOLLOW))
         {
-            if (link_fn)
+            link_fn = (char *)rt_malloc(DFS_PATH_MAX);
+            if (!link_fn)
             {
-                err = dfs_file_readlink(fullpath, link_fn, DFS_PATH_MAX);
-                if (err < 0)
-                {
-                    rt_free(link_fn);
-                    return -ENOENT;
-                }
-                else
-                {
-                    fullpath = link_fn;
-                    if (dfs_file_stat(fullpath, &buffer) != 0)
-                    {
-                        rt_free(link_fn);
-                        return -ENOENT;
-                    }
-                }
+                rt_set_errno(-ENOMEM);
+                ret = -1;
+                goto exit;
             }
 
+            err = dfs_file_readlink(fullpath, link_fn, DFS_PATH_MAX);
+            if (err < 0)
+            {
+                ret = -ENOENT;
+                goto exit;
+            }
+
+            fullpath = link_fn;
+            if (dfs_file_stat(fullpath, &buffer) != 0)
+            {
+                ret = -ENOENT;
+                goto exit;
+            }
         }
     }
     attr.st_mode = buffer.st_mode;
     ret = dfs_file_setattr(fullpath, &attr);
+
+exit:
     rt_free(link_fn);
+    rt_free(allocated_path);
 
     return ret;
 }
@@ -258,25 +291,14 @@ RTM_EXPORT(creat);
 int close(int fd)
 {
     int result;
-    struct dfs_file *file;
 
-    file = fd_get(fd);
-    if (file == NULL)
-    {
-        rt_set_errno(-EBADF);
-
-        return -1;
-    }
-
-    result = dfs_file_close(file);
+    result = dfs_fdtable_drop_fd(dfs_fdtable_get(), fd);
     if (result < 0)
     {
         rt_set_errno(result);
 
         return -1;
     }
-
-    fd_release(fd);
 
     return 0;
 }
@@ -302,17 +324,22 @@ ssize_t read(int fd, void *buf, size_t len)
     ssize_t result;
     struct dfs_file *file;
 
-    if (buf == NULL)
-    {
-        rt_set_errno(-EBADF);
-        return -1;
-    }
-
     file = fd_get(fd);
     if (file == NULL)
     {
         rt_set_errno(-EBADF);
 
+        return -1;
+    }
+
+    if (len == 0)
+    {
+        return 0;
+    }
+
+    if (buf == NULL)
+    {
+        rt_set_errno(-EFAULT);
         return -1;
     }
 
@@ -347,17 +374,22 @@ ssize_t write(int fd, const void *buf, size_t len)
     ssize_t result;
     struct dfs_file *file;
 
-    if (buf == NULL)
-    {
-        rt_set_errno(-EBADF);
-        return -1;
-    }
-
     file = fd_get(fd);
     if (file == NULL)
     {
         rt_set_errno(-EBADF);
 
+        return -1;
+    }
+
+    if (len == 0)
+    {
+        return 0;
+    }
+
+    if (buf == NULL)
+    {
+        rt_set_errno(-EFAULT);
         return -1;
     }
 
@@ -374,14 +406,22 @@ ssize_t write(int fd, const void *buf, size_t len)
 RTM_EXPORT(write);
 
 /**
- * this function is a POSIX compliant version, which will seek the offset for
+ * this function is a POSIX compliant version, which will Reposition the file offset for
  * an open file descriptor.
  *
- * @param fd the file descriptor.
- * @param offset the offset to be seeked.
- * @param whence the directory of seek.
+ * The `lseek` function sets the file offset for the file descriptor `fd`
+ * to a new value, determined by the `offset` and `whence` parameters.
+ * It can be used to seek to specific positions in a file for reading or writing.
  *
- * @return the current read/write position in the file, or -1 on failed.
+ * @param fd the file descriptor.
+ * @param offset The offset, in bytes, to set the file position.
+ *               The meaning of `offset` depends on the value of `whence`.
+ * @param whence the directive of seek. It can be one of:
+ *               - `SEEK_SET`: Set the offset to `offset` bytes from the beginning of the file.
+ *               - `SEEK_CUR`: Set the offset to its current location plus `offset` bytes.
+ *               - `SEEK_END`: Set the offset to the size of the file plus `offset` bytes.
+ *
+ * @return the resulting read/write position in the file, or -1 on failed.
  */
 off_t lseek(int fd, off_t offset, int whence)
 {
@@ -399,7 +439,7 @@ off_t lseek(int fd, off_t offset, int whence)
     result = dfs_file_lseek(file, offset, whence);
     if (result < 0)
     {
-        rt_set_errno(result);
+        rt_set_errno(-EPERM);
 
         return -1;
     }
@@ -540,6 +580,10 @@ int fstat(int fildes, struct stat *buf)
     if (dfs_is_mounted(file->dentry->mnt) == 0)
     {
         ret = file->dentry->mnt->fs_ops->stat(file->dentry, buf);
+        if (ret == RT_EOK && buf->st_nlink == 0 && file->vnode != RT_NULL)
+        {
+            buf->st_nlink = file->vnode->nlink;
+        }
     }
 
     return ret;
@@ -571,6 +615,11 @@ int fsync(int fildes)
     }
 
     ret = dfs_file_fsync(file);
+    if (ret < 0)
+    {
+        rt_set_errno(ret);
+        return -1;
+    }
 
     return ret;
 }
@@ -581,9 +630,15 @@ RTM_EXPORT(fsync);
  * control functions on devices.
  *
  * @param fildes the file description
- * @param cmd the specified command
+ * @param cmd the specified command, Common values include:
+ *     - `F_DUPFD`: Duplicate a file descriptor.
+ *     - `F_GETFD`: Get the file descriptor flags.
+ *     - `F_SETFD`: Set the file descriptor flags.
+ *     - `F_GETFL`: Get the file status flags.
+ *     - `F_SETFL`: Set the file status flags.
  * @param ... represents the additional information that is needed by this
- * specific device to perform the requested function.
+ * specific device to perform the requested function. For example:
+ *     - When `cmd` is `F_SETFL`, an additional integer argument specifies the new status flags.
  *
  * @return 0 on successful completion. Otherwise, -1 shall be returned and errno
  * set to indicate the error.
@@ -603,10 +658,17 @@ int fcntl(int fildes, int cmd, ...)
         arg = va_arg(ap, void *);
         va_end(ap);
 
-        ret = dfs_file_ioctl(file, cmd, arg);
-        if (ret < 0)
+        if (cmd == F_GETLK || cmd == F_SETLK || cmd == F_SETLKW)
         {
             ret = dfs_file_fcntl(fildes, cmd, (unsigned long)arg);
+        }
+        else
+        {
+            ret = dfs_file_ioctl(file, cmd, arg);
+            if (ret < 0)
+            {
+                ret = dfs_file_fcntl(fildes, cmd, (unsigned long)arg);
+            }
         }
     }
     else
@@ -623,6 +685,32 @@ int fcntl(int fildes, int cmd, ...)
     return ret;
 }
 RTM_EXPORT(fcntl);
+
+int fchmod(int fildes, mode_t mode)
+{
+    int ret;
+    struct dfs_attr attr = { 0 };
+    struct dfs_file *file;
+
+    file = fd_get(fildes);
+    if (file == RT_NULL)
+    {
+        rt_set_errno(-EBADF);
+        return -1;
+    }
+
+    attr.st_mode = mode;
+    attr.ia_valid = ATTR_MODE_SET;
+    ret = dfs_file_fsetattr(file, &attr);
+    if (ret < 0)
+    {
+        rt_set_errno(ret);
+        return -1;
+    }
+
+    return 0;
+}
+RTM_EXPORT(fchmod);
 
 /**
  * this function is a POSIX compliant version, which shall perform a variety of
@@ -765,7 +853,7 @@ RTM_EXPORT(fstatfs);
  * this function is a POSIX compliant version, which will make a directory
  *
  * @param path the directory path to be made.
- * @param mode
+ * @param mode The permission mode for the new directory (unused here, can be set to 0).
  *
  * @return 0 on successful, others on failed.
  */
@@ -827,7 +915,7 @@ int rmdir(const char *pathname)
 
     if (!pathname)
     {
-        rt_set_errno(-RT_ERROR);
+        rt_set_errno(-EPERM);
         return -1;
     }
 
@@ -840,7 +928,9 @@ int rmdir(const char *pathname)
         {
             dirent = readdir(dir);
             if (dirent == RT_NULL)
+            {
                 break;
+            }
             if (rt_strcmp(".", dirent->d_name) != 0 &&
                 rt_strcmp("..", dirent->d_name) != 0)
             {
@@ -852,7 +942,7 @@ int rmdir(const char *pathname)
 
         if (dirent)
         {
-            rt_set_errno(-RT_ERROR);
+            rt_set_errno(-EPERM);
             return -1;
         }
     }
@@ -861,7 +951,7 @@ int rmdir(const char *pathname)
     {
         if (S_ISLNK(stat.st_mode))
         {
-            rt_set_errno(-RT_ERROR);
+            rt_set_errno(-EPERM);
             return -1;
         }
     }
@@ -912,7 +1002,7 @@ DIR *opendir(const char *name)
     if (result >= 0)
     {
         /* open successfully */
-        t = (DIR *) rt_malloc(sizeof(DIR));
+        t = (DIR *)rt_malloc(sizeof(DIR));
         if (t == NULL)
         {
             dfs_file_close(file);
@@ -1057,10 +1147,12 @@ void seekdir(DIR *d, long offset)
         {
             /* seek to the offset position of directory */
             if (dfs_file_lseek(fd_get(d->fd), 0, SEEK_SET) >= 0)
+            {
                 d->num = d->cur = 0;
+            }
         }
 
-        while(file->fpos < offset)
+        while (file->fpos < offset)
         {
             if (!readdir(d))
             {
@@ -1083,7 +1175,9 @@ void rewinddir(DIR *d)
     {
         /* seek to the beginning of directory */
         if (dfs_file_lseek(fd_get(d->fd), 0, SEEK_SET) >= 0)
+        {
             d->num = d->cur = 0;
+        }
     }
 }
 RTM_EXPORT(rewinddir);
@@ -1200,10 +1294,6 @@ int chdir(const char *path)
     return 0;
 }
 RTM_EXPORT(chdir);
-
-#ifdef RT_USING_FINSH
-FINSH_FUNCTION_EXPORT_ALIAS(chdir, cd, change current working directory);
-#endif
 #endif
 
 /**
@@ -1283,7 +1373,7 @@ void setcwd(char *buf)
     rt_kprintf(NO_WORKING_DIR);
 #endif
 
-    return ;
+    return;
 }
 RTM_EXPORT(setcwd);
 

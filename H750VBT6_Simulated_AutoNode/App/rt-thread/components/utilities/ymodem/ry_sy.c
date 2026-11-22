@@ -7,6 +7,7 @@
  * Date           Author       Notes
  * 2019-12-09     Steven Liu   the first version
  * 2021-04-14     Meco Man     Check the file path's legitimacy of 'sy' command
+ * 2026-02-01     wdfk-prog    update ymodem transfer behaviors
  */
 
 #include <rtthread.h>
@@ -46,32 +47,22 @@ static enum rym_code _rym_recv_begin(
     rt_size_t len)
 {
     struct custom_ctx *cctx = (struct custom_ctx *)ctx;
-    struct stat file_buf;
-    char insert_0 = '\0';
-    char *ret;
     rt_err_t err;
-    ret = strchr(cctx->fpath,insert_0);
-    if(ret)
-    {
-        *ret = '/';
-    }
-    else
-    {
-        rt_kprintf("No end character\n");
-        return RYM_ERR_ACK;
-    }
-    rt_strncpy(ret + 1, (const char *)buf, len - 1);
-    cctx->fd = open(cctx->fpath, O_CREAT | O_WRONLY | O_TRUNC, 0);
+
+    /* support recv multiple files in one session */
+    char user_path[DFS_PATH_MAX]={0};
+    rt_snprintf(user_path, DFS_PATH_MAX, "%s%s", cctx->fpath, buf);
+    cctx->fd = open(user_path, O_CREAT | O_WRONLY | O_TRUNC, 0);
+
     if (cctx->fd < 0)
     {
-        rt_err_t err = rt_get_errno();
-        rt_kprintf("error creating file: %d\n", err);
+        err = rt_get_errno();
+        rt_kprintf("error creating file: %ld\n", err);
         return RYM_CODE_CAN;
     }
     cctx->flen = atoi(1 + (const char *)buf + rt_strnlen((const char *)buf, len - 1));
     if (cctx->flen == 0)
         cctx->flen = -1;
-
     return RYM_CODE_ACK;
 }
 
@@ -120,12 +111,15 @@ static enum rym_code _rym_send_begin(
     struct stat file_buf;
     char insert_0 = '\0';
     rt_err_t err;
+    const char *fdst = RT_NULL;
+    char *allocated_fdst = RT_NULL;
+    int written;
 
     cctx->fd = open(cctx->fpath, O_RDONLY);
     if (cctx->fd < 0)
     {
         err = rt_get_errno();
-        rt_kprintf("error open file: %d\n", err);
+        rt_kprintf("error open file: %ld\n", err);
         return RYM_ERR_FILE;
     }
     rt_memset(buf, 0, len);
@@ -133,20 +127,37 @@ static enum rym_code _rym_send_begin(
     if (err != RT_EOK)
     {
         rt_kprintf("error open file.\n");
+        close(cctx->fd);
+        cctx->fd = -1;
         return RYM_ERR_FILE;
     }
 
-    const char *fdst = _get_path_lastname(cctx->fpath);
-    if(fdst != cctx->fpath)
+    fdst = _get_path_lastname(cctx->fpath);
+    if (fdst != cctx->fpath)
     {
-        fdst = dfs_normalize_path(RT_NULL, fdst);
-        if (fdst == RT_NULL)
+        allocated_fdst = dfs_normalize_path(RT_NULL, fdst);
+        if (allocated_fdst == RT_NULL)
         {
+            close(cctx->fd);
+            cctx->fd = -1;
             return RYM_ERR_FILE;
         }
+        fdst = allocated_fdst;
     }
 
-    rt_sprintf((char *)buf, "%s%c%d", fdst, insert_0, file_buf.st_size);
+    written = rt_snprintf((char *)buf, len, "%s%c%ld", fdst, insert_0, (long)file_buf.st_size);
+    if (allocated_fdst != RT_NULL)
+    {
+        rt_free(allocated_fdst);
+    }
+
+    if (written < 0 || (rt_size_t)written >= len)
+    {
+        rt_kprintf("file info too long for ymodem packet.\n");
+        close(cctx->fd);
+        cctx->fd = -1;
+        return RYM_ERR_FILE;
+    }
 
     return RYM_CODE_SOH;
 }
@@ -158,20 +169,35 @@ static enum rym_code _rym_send_data(
 {
     struct custom_ctx *cctx = (struct custom_ctx *)ctx;
     rt_size_t read_size;
-    int retry_read;
+    int rlen;
 
     read_size = 0;
-    for (retry_read = 0; retry_read < 10; retry_read++)
+    /* Loop until we fill one YMODEM data block, hit EOF, or get a read error. */
+    while (read_size < len)
     {
-        read_size += read(cctx->fd, buf + read_size, len - read_size);
-        if (read_size == len)
+        rlen = read(cctx->fd, buf + read_size, len - read_size);
+        if (rlen > 0)
+        {
+            read_size += rlen;
+            if (read_size == len)
+                break;
+        }
+        else if (rlen == 0)
+        {
+            /* EOF: mark finishing so sender switches to EOT after padding. */
+            ctx->stage = RYM_STAGE_FINISHING;
             break;
+        }
+        else
+        {
+            /* Read error: abort transfer and report file error to the protocol. */
+            return RYM_ERR_FILE;
+        }
     }
 
     if (read_size < len)
     {
         rt_memset(buf + read_size, 0x1A, len - read_size);
-        ctx->stage = RYM_STAGE_FINISHING;
     }
 
     if (read_size > 128)
@@ -194,18 +220,26 @@ static enum rym_code _rym_send_end(
     return RYM_CODE_SOH;
 }
 
-static rt_err_t rym_download_file(rt_device_t idev,const char *file_path)
+static rt_err_t rym_download_file(rt_device_t idev, const char *file_path)
 {
     rt_err_t res;
-    struct custom_ctx *ctx = rt_calloc(1, sizeof(*ctx));
+    struct custom_ctx *ctx;
 
+    if (!file_path || rt_strlen(file_path) >= DFS_PATH_MAX)
+    {
+        rt_kprintf("file path is too long or invalid.\n");
+        return -RT_ERROR;
+    }
+
+    ctx = rt_calloc(1, sizeof(*ctx));
     if (!ctx)
     {
         rt_kprintf("rt_malloc failed\n");
         return -RT_ENOMEM;
     }
     ctx->fd = -1;
-    rt_strncpy(ctx->fpath, file_path, DFS_PATH_MAX);
+    rt_strncpy(ctx->fpath, file_path, sizeof(ctx->fpath) - 1);
+    ctx->fpath[sizeof(ctx->fpath) - 1] = '\0';
     RT_ASSERT(idev);
     res = rym_recv_on_device(&ctx->parent, idev, RT_DEVICE_OFLAG_RDWR | RT_DEVICE_FLAG_INT_RX,
                              _rym_recv_begin, _rym_recv_data, _rym_recv_end, 1000);
@@ -217,15 +251,23 @@ static rt_err_t rym_download_file(rt_device_t idev,const char *file_path)
 static rt_err_t rym_upload_file(rt_device_t idev, const char *file_path)
 {
     rt_err_t res = 0;
+    struct custom_ctx *ctx;
 
-    struct custom_ctx *ctx = rt_calloc(1, sizeof(*ctx));
+    if (!file_path || rt_strlen(file_path) >= DFS_PATH_MAX)
+    {
+        rt_kprintf("file path is too long or invalid.\n");
+        return -RT_ERROR;
+    }
+
+    ctx = rt_calloc(1, sizeof(*ctx));
     if (!ctx)
     {
         rt_kprintf("rt_malloc failed\n");
         return -RT_ENOMEM;
     }
     ctx->fd = -1;
-    rt_strncpy(ctx->fpath, file_path, DFS_PATH_MAX);
+    rt_strncpy(ctx->fpath, file_path, sizeof(ctx->fpath) - 1);
+    ctx->fpath[sizeof(ctx->fpath) - 1] = '\0';
     RT_ASSERT(idev);
     res = rym_send_on_device(&ctx->parent, idev,
                              RT_DEVICE_OFLAG_RDWR | RT_DEVICE_FLAG_INT_RX,
@@ -242,7 +284,7 @@ static rt_err_t ry(uint8_t argc, char **argv)
 {
     rt_err_t res;
     rt_device_t dev;
-    /* temporarily support 1 file*/
+
     const char *file_path;
     if (argc < 2)
     {
