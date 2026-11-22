@@ -29,3 +29,38 @@ RT-Thread is selected as the operating system for its robustness and compatibili
 #### Details of implemented functions
 Please refer to the docs folder.
 
+### Windows 构建与烧录
+
+完整步骤、手工命令和故障排查见
+[WINDOWS_BUILD_FLASH.md](H750VBT6_Simulated_AutoNode/WINDOWS_BUILD_FLASH.md)。
+
+Windows 工具链统一放在 `E:\tools`：
+
+- `cmake-4.4.4-windows-x86_64`
+- `xpack-arm-none-eabi-gcc-10.3.1-2.1`
+- `mingw64`（GNU Make）
+- `OpenOCD-20260302-0.12.0`
+
+构建 Boot 和 QSPI App：
+
+```powershell
+cd H750VBT6_Simulated_AutoNode
+.\build-windows.ps1
+```
+
+烧录并校验两个镜像：
+
+```powershell
+.\flash-windows.ps1
+```
+
+只烧录其中一个镜像：
+
+```powershell
+.\flash-windows.ps1 -BootOnly
+.\flash-windows.ps1 -AppOnly
+```
+
+构建使用 `CMake + Unix Makefiles`，产物为
+`boot/build/RTThread-Boot.bin` 和 `build-app/Simulated-GW-ECU.bin`。
+
