@@ -8,14 +8,15 @@
 | --- | --- |
 | QSPI JEDEC ID | `EF 40 18`（W25Q128） |
 | Boot 烧录 | `0x08000000`，OpenOCD 写入并校验通过 |
-| Boot 向量 | `SP=0x24000C68`，`Reset=0x08001FB1` |
-| Boot 大小 | `10,684` 字节，片内 128 KiB 限制内 |
+| Boot 向量 | `SP=0x24000C68`，`Reset=0x08001F65` |
+| Boot 大小 | `10,612` 字节，片内 128 KiB 限制内 |
 | App 烧录 | `0x90000000`，OpenOCD 写入并校验通过 |
 | App 大小 | `219,844` 字节 |
 | App 向量 | `SP=0x24001280`，`Reset=0x90027E75` |
 | App 入口断点 | `PC=0x90027E74` |
 | 运行时 VTOR | `0x90000000` |
 | 异常状态 | `CFSR=0x00000000`，`HFSR=0x00000000` |
+| 连续运行 | 受控复位后稳定运行 40 秒，未再次进入 Boot |
 
 串口可同时看到 Boot 和 App 日志。App 未插 SD 卡时可能出现
 `mmcsd_dev: wait cmd completed timeout`，这是板级 SD 卡检测日志，与
@@ -42,6 +43,18 @@ Boot/QSPI 启动无关。
 Boot 启动后初始化 QSPI、读取 JEDEC ID、置位 W25Q128 的 QE 位，校验 App
 向量表，然后保留 Thumb 位设置 `VTOR=0x90000000` 并跳转。App 使用
 `0x6B` 四线 XIP，失败时 Boot 回退到单线映射。
+
+## 启动问题修复记录
+
+早期 Boot 在 `boot_app_jump()` 中调用 `SCB_CleanDCache()` 清理整个
+D-Cache。实板断点抓到异常发生在 `0x08000940` 的缓存脏行回写循环内，
+此时 `CFSR=0x00000400`（`IMPRECISERR`），`HFSR=0x40000000`
+（`FORCED`）。该回写可能访问 QSPI 映射区或其他不可写区域，导致跳转前
+触发 HardFault。
+
+现在 Boot 在跳转前关闭 I-Cache/D-Cache，只执行
+`SCB_InvalidateDCache()`，不再把 Boot 的脏缓存写回存储器，然后设置
+`VTOR` 并用保留 Thumb 位的入口地址跳转。App 启动后会重新打开缓存。
 
 ## 构建
 

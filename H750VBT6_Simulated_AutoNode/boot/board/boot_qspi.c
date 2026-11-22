@@ -248,11 +248,14 @@ void boot_app_jump(uint32_t app_base, uint32_t app_sp, uint32_t app_entry)
     }
 
     SCB->ICSR = SCB_ICSR_PENDSVCLR_Msk;
+    SCB->CCR &= ~(SCB_CCR_IC_Msk | SCB_CCR_DC_Msk);
+    __DSB();
+    __ISB();
+
+    SCB->ICIALLU = 0UL;
+    SCB_InvalidateDCache();
     SCB->VTOR = app_base;
 
-    SCB_CleanDCache();
-    SCB_InvalidateICache();
-    SCB_InvalidateDCache();
     __DSB();
     __ISB();
 
