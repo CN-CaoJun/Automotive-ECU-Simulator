@@ -1,8 +1,14 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$Fresh
+)
 
 $ErrorActionPreference = 'Stop'
-$projectRoot = $PSScriptRoot
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$appRoot = Join-Path $projectRoot 'App'
+$bootRoot = Join-Path $projectRoot 'Boot'
+$appBuild = Join-Path $appRoot 'build'
+$bootBuild = Join-Path $bootRoot 'build'
 $toolsRoot = if ($env:EMBEDDED_TOOLS_ROOT) { $env:EMBEDDED_TOOLS_ROOT } else { 'E:\tools' }
 $gccRoot = if ($env:ARM_GCC_ROOT) { $env:ARM_GCC_ROOT } else { Join-Path $toolsRoot 'xpack-arm-none-eabi-gcc-10.3.1-2.1' }
 $cmake = Join-Path $toolsRoot 'cmake-4.4.4-windows-x86_64\bin\cmake.exe'
@@ -19,25 +25,27 @@ $env:ARM_GCC_ROOT = $gccRoot
 $env:PATH = @((Split-Path $cmake), (Split-Path $gcc), (Split-Path $make), $env:PATH) -join ';'
 $makeForCMake = $make -replace '\\', '/'
 $generatorArgs = @('-G', 'Unix Makefiles', "-DCMAKE_MAKE_PROGRAM=$makeForCMake")
+[object[]]$freshArgs = @()
+if ($Fresh) { $freshArgs += '--fresh' }
 $jobs = [Environment]::ProcessorCount
 
 Push-Location $projectRoot
 try {
-    & $cmake -S boot -B boot/build @generatorArgs -DCMAKE_BUILD_TYPE=Release
+    & $cmake @freshArgs -S $bootRoot -B $bootBuild @generatorArgs -DCMAKE_BUILD_TYPE=Release
     if ($LASTEXITCODE -ne 0) { throw 'Boot CMake configuration failed.' }
 
-    & $cmake --build boot/build --parallel $jobs
+    & $cmake --build $bootBuild --parallel $jobs
     if ($LASTEXITCODE -ne 0) { throw 'Boot build failed.' }
 
-    & $cmake -S . -B build-app @generatorArgs -DAPP_IN_QSPI=ON
+    & $cmake @freshArgs -S $appRoot -B $appBuild @generatorArgs -DAPP_IN_QSPI=ON
     if ($LASTEXITCODE -ne 0) { throw 'App CMake configuration failed.' }
 
-    & $cmake --build build-app --parallel $jobs
+    & $cmake --build $appBuild --parallel $jobs
     if ($LASTEXITCODE -ne 0) { throw 'App build failed.' }
 }
 finally {
     Pop-Location
 }
 
-Get-Item boot/build/RTThread-Boot.bin, build-app/Simulated-GW-ECU.bin |
+Get-Item (Join-Path $bootBuild 'RTThread-Boot.bin'), (Join-Path $appBuild 'Simulated-GW-ECU.bin') |
     Select-Object FullName, Length, LastWriteTime

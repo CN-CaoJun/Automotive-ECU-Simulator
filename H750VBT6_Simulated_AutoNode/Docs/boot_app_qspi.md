@@ -8,12 +8,12 @@
 | --- | --- |
 | QSPI JEDEC ID | `EF 40 18`（W25Q128） |
 | Boot 烧录 | `0x08000000`，OpenOCD 写入并校验通过 |
-| Boot 向量 | `SP=0x24000C68`，`Reset=0x08001F65` |
-| Boot 大小 | `10,612` 字节，片内 128 KiB 限制内 |
+| Boot 向量 | `SP=0x24000C68`，`Reset=0x08002221` |
+| Boot 大小 | `14,960` 字节，片内 128 KiB 限制内 |
 | App 烧录 | `0x90000000`，OpenOCD 写入并校验通过 |
-| App 大小 | `219,844` 字节 |
-| App 向量 | `SP=0x24001280`，`Reset=0x90027E75` |
-| App 入口断点 | `PC=0x90027E74` |
+| App 大小 | `224,028` 字节 |
+| App 向量 | `SP=0x24001280`，`Reset=0x90027D2D` |
+| App 入口断点 | `PC=0x90027D2C` |
 | 运行时 VTOR | `0x90000000` |
 | 异常状态 | `CFSR=0x00000000`，`HFSR=0x00000000` |
 | 连续运行 | 受控复位后稳定运行 40 秒，未再次进入 Boot |
@@ -61,21 +61,23 @@ D-Cache。实板断点抓到异常发生在 `0x08000940` 的缓存脏行回写�
 ```bash
 cd H750VBT6_Simulated_AutoNode
 
-cmake -S boot -B boot/build -DCMAKE_BUILD_TYPE=Release
-cmake --build boot/build -j"$(nproc)"
+cmake -S Boot -B Boot/build -DCMAKE_BUILD_TYPE=Release
+cmake --build Boot/build -j"$(nproc)"
 
-cmake -S . -B build-app -DAPP_IN_QSPI=ON
-cmake --build build-app -j"$(nproc)"
+cmake -S App -B App/build -DAPP_IN_QSPI=ON
+cmake --build App/build -j"$(nproc)"
 ```
 
 生成：
 
-- `boot/build/RTThread-Boot.bin`
-- `build-app/Simulated-GW-ECU.bin`
+- `Boot/build/RTThread-Boot.bin`
+- `App/build/Simulated-GW-ECU.bin`
 
 Boot 构建会检查镜像不超过 128 KiB。App 链接脚本为
-`linkscripts/STM32H750VBTx/app_qspi.lds`，App 向量表位于
+`App/linkscripts/STM32H750VBTx/app_qspi.lds`，App 向量表位于
 `0x90000000`。
+
+Windows 下的脚本构建和烧录步骤见 `Docs/WINDOWS_BUILD_FLASH.md`。
 
 ## 连接检查
 
@@ -84,7 +86,7 @@ lsusb | grep -i 0d28
 ls -l /dev/ttyACM0
 
 cd H750VBT6_Simulated_AutoNode
-./openocd-scripts/check-qspi.sh
+./Scripts/openocd-scripts/check-qspi.sh
 ```
 
 预期 QSPI ID：
@@ -103,14 +105,14 @@ Boot：
 
 ```bash
 cd H750VBT6_Simulated_AutoNode
-./openocd-scripts/flash-boot.sh
+./Scripts/openocd-scripts/flash-boot.sh
 ```
 
 App：
 
 ```bash
 cd H750VBT6_Simulated_AutoNode
-./openocd-scripts/flash-app.sh
+./Scripts/openocd-scripts/flash-app.sh
 ```
 
 两个脚本都通过 `program ... verify ...` 写入并回读校验。OpenOCD 的
@@ -135,7 +137,7 @@ Boot 实板输出：
 [Boot] RT-Thread QSPI bootloader
 [Boot] QSPI JEDEC ID: EF4018
 [Boot] QSPI mapped in 4-bit mode.
-[Boot] Application vector: SP=0x24001280 entry=0x90027E75
+[Boot] Application vector: SP=0x24001280 entry=0x90027D2D
 [Boot] Jumping to application at 0x90000000
 ```
 
@@ -152,10 +154,10 @@ isotp main: create cantp_rx thread success!
 App 入口和运行时状态可用下面的断点检查复现：
 
 ```bash
-cd H750VBT6_Simulated_AutoNode/openocd-scripts
+cd H750VBT6_Simulated_AutoNode/Scripts/openocd-scripts
 
 openocd -f interface/cmsis-dap.cfg -f target/stm32h7x_extern.cfg -c \
-  'init; reset halt; bp 0x90027e74 2 hw; resume; wait_halt 5000;
+  'init; reset halt; bp 0x90027d2c 2 hw; resume; wait_halt 5000;
    echo "--- app entry ---";
    echo [format "VTOR=%08x" [mrw 0xE000ED08]];
    echo [format "CFSR=%08x" [mrw 0xE000ED28]];
@@ -166,7 +168,7 @@ openocd -f interface/cmsis-dap.cfg -f target/stm32h7x_extern.cfg -c \
 
 ```text
 [stm32h7x.cpu0] halted due to breakpoint, current mode: Thread
-xPSR: 0x61000000 pc: 0x90027e74 psp: ...
+xPSR: 0x61000000 pc: 0x90027d2c psp: ...
 --- app entry ---
 VTOR=90000000
 CFSR=00000000

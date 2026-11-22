@@ -13,7 +13,7 @@
             "environment":[],
             "externConsole":false,
             "MIMode":"gdb",
-            "miDebuggerPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-6-2017-q2-update/bin/arm-none-eabi-gdb",
+            "miDebuggerPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin/arm-none-eabi-gdb.exe",
             "miDebuggerServerAddress": "localhost:3333"
         },
         {
@@ -43,13 +43,13 @@
             "interface":"swd",
             "device": "STM32H750x",                
             "configFiles": [
-                "openocd-scripts/interface/cmsis-dap.cfg",          
-                "openocd-scripts/target/stm32h7x_1M.cfg",         
+                "../Scripts/openocd-scripts/interface/cmsis-dap.cfg",
+                "../Scripts/openocd-scripts/target/stm32h7x_extern.cfg",
 
             ],
-            "svdFile": "STM32H750x.svd",
-            "armToolchainPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin",
-            "gdbPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
+            "svdFile": "../Docs/STM32H750x.svd",
+            "armToolchainPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin",
+            "gdbPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin/arm-none-eabi-gdb.exe",
         },
         {
             "name": "Openocd Debug (Unix)",
@@ -63,11 +63,11 @@
             "interface":"swd",
             "device": "STM32H750x",                
             "configFiles": [
-                "openocd-scripts/interface/cmsis-dap.cfg",          
-                "openocd-scripts/target/stm32h7x_1M.cfg",         
+                "../Scripts/openocd-scripts/interface/cmsis-dap.cfg",
+                "../Scripts/openocd-scripts/target/stm32h7x_extern.cfg",
 
             ],
-            "svdFile": "STM32H750x.svd",
+            "svdFile": "../Docs/STM32H750x.svd",
             "armToolchainPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin",
             "gdbPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gdb",
         },
@@ -80,11 +80,11 @@
             "runToEntryPoint": "main",
             "targetId": "STM32H750VBTx",
             "showDevDebugOutput": "none",
-            "svdFile": "STM32H750x.svd",
+            "svdFile": "../Docs/STM32H750x.svd",
             "servertype": "pyocd",
-            "serverpath": "C:/Users/dj461v/AppData/Local/miniconda3/envs/pyocd/Scripts/pyocd.exe",
-            "armToolchainPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin",
-            "gdbPath": "C:/AptivDevEnv/gcc-arm-none-eabi-10.3/bin/arm-none-eabi-gdb.exe",
+            "serverpath": "pyocd",
+            "armToolchainPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin",
+            "gdbPath": "E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1/bin/arm-none-eabi-gdb.exe",
         },
         {
             "name": "Pyocd Debug (Unix)",
@@ -95,7 +95,7 @@
             "runToEntryPoint": "main",
             "targetId": "STM32H750VBTx",
             "showDevDebugOutput": "none",
-            "svdFile": "STM32H750x.svd",
+            "svdFile": "../Docs/STM32H750x.svd",
             "servertype": "pyocd",
             "serverpath": "/home/caojun/miniconda3/envs/can/bin/pyocd",
             "armToolchainPath": "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10/bin",

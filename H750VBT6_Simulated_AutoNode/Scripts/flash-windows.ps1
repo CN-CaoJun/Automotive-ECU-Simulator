@@ -9,7 +9,7 @@ if ($BootOnly -and $AppOnly) {
     throw 'BootOnly and AppOnly cannot be used together.'
 }
 
-$projectRoot = $PSScriptRoot
+$projectRoot = Split-Path -Parent $PSScriptRoot
 $toolsRoot = if ($env:EMBEDDED_TOOLS_ROOT) { $env:EMBEDDED_TOOLS_ROOT } else { 'E:\tools' }
 $openocd = Get-ChildItem -LiteralPath $toolsRoot -Directory -Filter 'OpenOCD-*' |
     Sort-Object Name -Descending |
@@ -21,8 +21,8 @@ if (-not $openocd) {
     throw "OpenOCD not found under $toolsRoot\OpenOCD-*\bin\openocd.exe"
 }
 
-$bootImage = Join-Path $projectRoot 'boot\build\RTThread-Boot.bin'
-$appImage = Join-Path $projectRoot 'build-app\Simulated-GW-ECU.bin'
+$bootImage = Join-Path $projectRoot 'Boot\build\RTThread-Boot.bin'
+$appImage = Join-Path $projectRoot 'App\build\Simulated-GW-ECU.bin'
 if (-not $AppOnly -and -not (Test-Path -LiteralPath $bootImage -PathType Leaf)) {
     throw "Boot image not found: $bootImage. Run build-windows.ps1 first."
 }
@@ -30,7 +30,7 @@ if (-not $BootOnly -and -not (Test-Path -LiteralPath $appImage -PathType Leaf)) 
     throw "App image not found: $appImage. Run build-windows.ps1 first."
 }
 
-$scriptsDir = Join-Path $projectRoot 'openocd-scripts'
+$scriptsDir = Join-Path $projectRoot 'Scripts\openocd-scripts'
 Push-Location $scriptsDir
 try {
     if (-not $AppOnly) {

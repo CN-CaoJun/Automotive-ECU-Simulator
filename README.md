@@ -32,7 +32,7 @@ Please refer to the docs folder.
 ### Windows 构建与烧录
 
 完整步骤、手工命令和故障排查见
-[WINDOWS_BUILD_FLASH.md](H750VBT6_Simulated_AutoNode/WINDOWS_BUILD_FLASH.md)。
+[WINDOWS_BUILD_FLASH.md](H750VBT6_Simulated_AutoNode/Docs/WINDOWS_BUILD_FLASH.md)。
 
 Windows 工具链统一放在 `E:\tools`：
 
@@ -45,22 +45,22 @@ Windows 工具链统一放在 `E:\tools`：
 
 ```powershell
 cd H750VBT6_Simulated_AutoNode
-.\build-windows.ps1
+.\Scripts\build-windows.ps1
 ```
 
 烧录并校验两个镜像：
 
 ```powershell
-.\flash-windows.ps1
+.\Scripts\flash-windows.ps1
 ```
 
 只烧录其中一个镜像：
 
 ```powershell
-.\flash-windows.ps1 -BootOnly
-.\flash-windows.ps1 -AppOnly
+.\Scripts\flash-windows.ps1 -BootOnly
+.\Scripts\flash-windows.ps1 -AppOnly
 ```
 
 构建使用 `CMake + Unix Makefiles`，产物为
-`boot/build/RTThread-Boot.bin` 和 `build-app/Simulated-GW-ECU.bin`。
+`Boot/build/RTThread-Boot.bin` 和 `App/build/Simulated-GW-ECU.bin`。
 

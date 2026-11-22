@@ -1,3 +1,3 @@
 {
-    "cmake.sourceDirectory": "${workspaceFolder}/H750VBT6_Simulated_AutoNode"
+    "cmake.sourceDirectory": "${workspaceFolder}/H750VBT6_Simulated_AutoNode/App"
 }

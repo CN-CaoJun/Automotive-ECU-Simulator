@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 
@@ -37,6 +38,6 @@ def flash_firmware(firmware_path, target_device):
         print("Firmware flashing failed")
 
 # Example usage
-firmware_path = "build/Simulated-GW-ECU.elf"
+firmware_path = os.path.join(os.path.dirname(__file__), "..", "App", "build", "Simulated-GW-ECU.elf")
 target_device = "STM32H750VBTx"  # Replace with your target device name
 flash_firmware(firmware_path, target_device)

@@ -3,6 +3,16 @@
 本文记录 STM32H750VBT6 + RT-Thread + W25Q128 QSPI App 工程在 Windows 下的
 编译、烧录和启动验证方法。
 
+工程目录结构：
+
+```text
+H750VBT6_Simulated_AutoNode/
+├── App/       RT-Thread 应用、驱动、HAL、CubeMX 和 CMake 工程
+├── Boot/      QSPI Bootloader
+├── Docs/      工程文档和 SVD
+└── Scripts/   构建、OpenOCD、PyOCD 和调试脚本
+```
+
 验证环境：
 
 - Windows 10/11
@@ -52,21 +62,21 @@ cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode
 一键编译 Boot 和 QSPI App：
 
 ```powershell
-.\build-windows.ps1
+.\Scripts\build-windows.ps1
 ```
 
 脚本会分别执行：
 
-1. 配置并编译 `boot`，输出到 `boot\build`。
-2. 配置并编译 App，输出到 `build-app`。
+1. 配置并编译 `Boot`，输出到 `Boot\build`。
+2. 配置并编译 `App`，输出到 `App\build`。
 3. App 使用 QSPI XIP 链接脚本，镜像必须从 `0x90000000` 运行。
 
 生成文件：
 
 | 镜像 | 文件 | 烧录地址 |
 | --- | --- | --- |
-| RT-Thread Boot | `boot\build\RTThread-Boot.bin` | `0x08000000` |
-| Simulated-GW-ECU | `build-app\Simulated-GW-ECU.bin` | `0x90000000` |
+| RT-Thread Boot | `Boot\build\RTThread-Boot.bin` | `0x08000000` |
+| Simulated-GW-ECU | `App\build\Simulated-GW-ECU.bin` | `0x90000000` |
 
 本次验证结果：
 
@@ -74,8 +84,8 @@ cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode
 RTThread-Boot.elf  text 13836  data 1124  bss 5404
 Boot image size: 14960 / 131072 bytes
 
-Simulated-GW-ECU.elf  text 220308  data 3712  bss 24216
-Simulated-GW-ECU.bin  224020 bytes
+Simulated-GW-ECU.elf  text 220316  data 3712  bss 24216
+Simulated-GW-ECU.bin  224028 bytes
 ```
 
 ## 3. 手工编译命令
@@ -85,29 +95,29 @@ Simulated-GW-ECU.bin  224020 bytes
 编译 Boot：
 
 ```powershell
-cmake -S boot -B boot/build `
+cmake -S Boot -B Boot/build `
   -G "Unix Makefiles" `
   -DCMAKE_MAKE_PROGRAM="E:/tools/mingw64/bin/make.exe" `
   -DCMAKE_BUILD_TYPE=Release
 
-cmake --build boot/build --parallel
+cmake --build Boot/build --parallel
 ```
 
 编译 QSPI App：
 
 ```powershell
-cmake -S . -B build-app `
+cmake -S App -B App/build `
   -G "Unix Makefiles" `
   -DCMAKE_MAKE_PROGRAM="E:/tools/mingw64/bin/make.exe" `
   -DAPP_IN_QSPI=ON
 
-cmake --build build-app --parallel
+cmake --build App/build --parallel
 ```
 
 CMake 会通过 `ARM_GCC_ROOT` 或 PATH 查找 ARM GCC。也可以显式指定：
 
 ```powershell
-cmake -S boot -B boot/build `
+cmake -S Boot -B Boot/build `
   -G "Unix Makefiles" `
   -DCMAKE_MAKE_PROGRAM="E:/tools/mingw64/bin/make.exe" `
   -DTOOL_DIR="E:/tools/xpack-arm-none-eabi-gcc-10.3.1-2.1"
@@ -121,19 +131,19 @@ cmake -S boot -B boot/build `
 
 ```powershell
 cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode
-.\flash-windows.ps1
+.\Scripts\flash-windows.ps1
 ```
 
 只烧 Boot：
 
 ```powershell
-.\flash-windows.ps1 -BootOnly
+.\Scripts\flash-windows.ps1 -BootOnly
 ```
 
 只烧 App：
 
 ```powershell
-.\flash-windows.ps1 -AppOnly
+.\Scripts\flash-windows.ps1 -AppOnly
 ```
 
 成功时 OpenOCD 输出应包含：
@@ -157,7 +167,7 @@ flash1 'win w25q128fv/jv' id = 0x1840ef size = 16384 KiB
 打开 OpenOCD 脚本目录：
 
 ```powershell
-cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode\openocd-scripts
+cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode\Scripts\openocd-scripts
 ```
 
 烧录 Boot：
@@ -186,7 +196,7 @@ openocd -f interface/cmsis-dap.cfg `
 ```
 
 `flash_boot.cfg` 和 `flash_app.cfg` 使用相对路径查找构建产物，因此必须在
-`openocd-scripts` 目录中执行。
+`Scripts\openocd-scripts` 目录中执行。
 
 ## 6. 启动验证
 
@@ -213,7 +223,7 @@ isotp main: create cantp_rx thread success!
 也可以通过 SWD 检查运行时状态：
 
 ```powershell
-cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode\openocd-scripts
+cd E:\Automotive-ECU-Simulator\H750VBT6_Simulated_AutoNode\Scripts\openocd-scripts
 
 openocd -f interface/cmsis-dap.cfg `
   -f target/stm32h7x_extern.cfg `
@@ -249,7 +259,7 @@ arm-none-eabi-gcc --version
 ### 7.2 Boot 链接时报 `_exit`、`_kill`、`_getpid` 未定义
 
 Boot 是无 RTOS 文件系统的裸机镜像，已经在
-`boot\CMakeLists.txt` 中加入：
+`Boot\CMakeLists.txt` 中加入：
 
 ```text
 --specs=nosys.specs
@@ -282,10 +292,10 @@ QSPI 控制器未初始化时不要直接读取 `0x90000000`。
 
 | 文件 | 用途 |
 | --- | --- |
-| `build-windows.ps1` | 一键配置并编译 Boot 和 App |
-| `flash-windows.ps1` | 一键烧录并校验 Boot 和 App |
-| `openocd-scripts\flash_boot.cfg` | OpenOCD Boot 烧录配置 |
-| `openocd-scripts\flash_app.cfg` | OpenOCD QSPI App 烧录配置 |
-| `openocd-scripts\qspi_init.tcl` | 烧录前初始化 QSPI 控制器 |
-| `boot\build\RTThread-Boot.bin` | Boot 烧录镜像 |
-| `build-app\Simulated-GW-ECU.bin` | App 烧录镜像 |
+| `Scripts\build-windows.ps1` | 一键配置并编译 Boot 和 App |
+| `Scripts\flash-windows.ps1` | 一键烧录并校验 Boot 和 App |
+| `Scripts\openocd-scripts\flash_boot.cfg` | OpenOCD Boot 烧录配置 |
+| `Scripts\openocd-scripts\flash_app.cfg` | OpenOCD QSPI App 烧录配置 |
+| `Scripts\openocd-scripts\qspi_init.tcl` | 烧录前初始化 QSPI 控制器 |
+| `Boot\build\RTThread-Boot.bin` | Boot 烧录镜像 |
+| `App\build\Simulated-GW-ECU.bin` | App 烧录镜像 |
