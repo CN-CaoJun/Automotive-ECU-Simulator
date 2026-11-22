@@ -6,11 +6,31 @@ SET(CMAKE_SYSTEM_PROCESSOR cortex-m7)
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+SET(TOOL_DIR "" CACHE PATH "GNU Arm Embedded toolchain root directory")
+OPTION(APP_IN_QSPI "Build the RT-Thread application for XIP from QSPI flash" ON)
+
+IF(APP_IN_QSPI)
+	SET(APP_LINKER_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/linkscripts/STM32H750VBTx/app_qspi.lds")
+ELSE()
+	SET(APP_LINKER_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/linkscripts/STM32H750VBTx/link.lds")
+ENDIF()
+
 if(WIN32)
-    SET(TOOL_DIR "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw")
+	if(NOT TOOL_DIR)
+		SET(TOOL_DIR "D:/Software_Tools/env-windows-1.5.0/tools/bin/../../tools/gnu_gcc/arm_gcc/mingw")
+	endif()
 	set(PYTHON_EXECUTABLE "C:/Users/dj461v/AppData/Local/Programs/Python/Python38/python.exe")
-elseif(UNIX)
-    SET(TOOL_DIR "/home/caojun/wkspace/tools/gcc-arm-none-eabi-10.3-2021.10")
+elseif(UNIX AND NOT TOOL_DIR)
+	find_program(ARM_NONE_EABI_GCC arm-none-eabi-gcc)
+	if(NOT ARM_NONE_EABI_GCC AND EXISTS "/opt/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc")
+		SET(ARM_NONE_EABI_GCC "/opt/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc")
+	endif()
+	if(ARM_NONE_EABI_GCC)
+		get_filename_component(ARM_NONE_EABI_BIN_DIR "${ARM_NONE_EABI_GCC}" DIRECTORY)
+		get_filename_component(TOOL_DIR "${ARM_NONE_EABI_BIN_DIR}" DIRECTORY)
+	else()
+		SET(TOOL_DIR "${CMAKE_CURRENT_LIST_DIR}/../_tools/gcc-arm-none-eabi-10.3-2021.10")
+	endif()
 endif()
 
 message(STATUS "TOOL_DIR: ${TOOL_DIR}")
@@ -35,7 +55,7 @@ SET(CMAKE_ASM_FLAGS " -c -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard
 SET(CMAKE_C_COMPILER_WORKS TRUE)
 SET(CMAKE_CXX_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Dgcc -O0 -gdwarf-2 -g")
 SET(CMAKE_CXX_COMPILER_WORKS TRUE)
-SET(CMAKE_EXE_LINKER_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Wl,--gc-sections,-Map=rtthread.map,-cref,-u,Reset_Handler -T ${CMAKE_SOURCE_DIR}/linkscripts/STM32H750VBTx/link.lds")
+SET(CMAKE_EXE_LINKER_FLAGS " -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -ffunction-sections -fdata-sections -Wl,--gc-sections,-Map=rtthread.map,-cref,-u,Reset_Handler -T ${APP_LINKER_SCRIPT}")
 SET(CMAKE_C_STANDARD 11)
 SET(CMAKE_CXX_STANDARD 14)
 PROJECT(Simulated-GW-ECU C CXX ASM)
@@ -108,6 +128,10 @@ ADD_DEFINITIONS(
 	-D_POSIX_C_SOURCE=1
 	-D__RTTHREAD__
 )
+
+IF(APP_IN_QSPI)
+	ADD_DEFINITIONS(-DVECT_TAB_BASE_ADDRESS=0x90000000UL)
+ENDIF()
 
 SET(PROJECT_SOURCES
 	applications/cantest.c

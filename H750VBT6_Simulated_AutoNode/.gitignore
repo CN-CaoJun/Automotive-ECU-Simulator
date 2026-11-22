@@ -62,6 +62,7 @@ dkms.conf
 *.ilk
 *.old
 build
+build-app
 Debug
 *~
 *.o
